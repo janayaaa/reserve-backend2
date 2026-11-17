@@ -1,0 +1,594 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>{% block title %}ReServe Enterprise Admin{% endblock %}</title>
+
+  <!-- Immediate Back-Button & BFCache Security Guard -->
+  <script>
+    (function() {
+      function verifyAdminSession() {
+        var token = localStorage.getItem('admin_access_token');
+        if (!token && window.location.pathname !== '/login/') {
+          window.location.replace('/login/');
+        }
+      }
+      verifyAdminSession();
+      window.addEventListener('pageshow', function(event) {
+        if (event.persisted || !localStorage.getItem('admin_access_token')) {
+          verifyAdminSession();
+        }
+      });
+    })();
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Poppins', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            reserve: {
+              bg: '#F4F8F6',
+              primary: '#1B4D3E',
+              primary1: '#4F695D',
+              primary2: '#12372C',
+              button: '#3A826D',
+              border: '#DCE5DF',
+              input: '#F7F9F7',
+              soft: '#E8EFEA',
+              accent: '#EBB338',
+              danger: '#B3261E',
+              dangerBg: '#FBE4E1',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="{% static 'css/compiled.css' %}">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: 'Poppins', sans-serif; background-color: #F4F8F6; color: #12372C; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #F4F8F6; }
+    ::-webkit-scrollbar-thumb { background: #C5D4CB; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3A826D; }
+
+    /* Strictly sticky modal headers across all Admin modals */
+    .modal-overlay > div > div:first-child {
+      position: sticky !important;
+      top: 0 !important;
+      z-index: 30 !important;
+      background-color: #ffffff;
+    }
+  </style>
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-[#F4F8F6] min-h-screen w-screen overflow-x-hidden flex flex-col font-sans antialiased text-[#12372C] selection:bg-[#1B4D3E] selection:text-white" {% block body_attrs %}{% endblock %}>
+  {% csrf_token %}
+
+  <!-- ========================================================================= -->
+  <!-- NON-BLOCKING GLOBAL SPA ACTION LOADER PILL                                -->
+  <!-- ========================================================================= -->
+  <div id="adminGlobalLoader" style="z-index: 10000;" class="hidden fixed top-20 right-6 bg-[#12372C] text-white px-4 py-2.5 rounded-xl shadow-xl border border-[#3A826D]/40 flex items-center gap-3 text-xs font-semibold tracking-wide transition-all">
+    <svg class="animate-spin h-4 w-4 text-[#EBB338]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
+    <span id="adminGlobalLoaderText">Processing changes...</span>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- SPA PAGE NAVIGATION OVERLAY LOADER (NO BROWSER REFRESH)                   -->
+  <!-- ========================================================================= -->
+  <div id="adminSpaPageLoader" style="z-index: 9000;" class="hidden fixed inset-0 top-16 bg-[#F4F8F6]/85 backdrop-blur-xs flex-col items-center justify-center select-none">
+    <div class="bg-white p-6 rounded-2xl border border-[#DCE5DF] shadow-xl flex flex-col items-center gap-3">
+      <div class="w-11 h-11 rounded-full border-4 border-[#E8EFEA] border-t-[#1B4D3E] animate-spin"></div>
+      <p id="adminSpaPageLoaderText" class="text-xs font-bold text-[#12372C]">Loading...</p>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- ENTERPRISE TOPBAR COMMAND HEADER WITH LOGIN SVG LOGO                      -->
+  <!-- ========================================================================= -->
+  <header class="bg-[#12372C] text-white px-4 md:px-8 h-16 flex justify-between items-center shrink-0 border-b border-[#1B4D3E] shadow-[0_4px_20px_rgba(18,55,44,0.12)] sticky top-0 z-50 w-full">
+    <a href="/dashboard/" data-spa-link="true" class="flex items-center gap-3 shrink-0 group">
+      <div class="w-10 h-10 rounded-xl bg-[#0F2920] border border-white/15 flex items-center justify-center p-1 shadow-inner group-hover:border-[#8BC3A3]/60 transition-all">
+        <svg class="w-full h-full" viewBox="0 0 210 210">
+          <rect x="0" y="118" width="46" height="9" rx="4.5" fill="#8BC3A3" transform="rotate(-8 23 122)"/>
+          <rect x="8" y="140" width="60" height="9" rx="4.5" fill="#8BC3A3" transform="rotate(-8 38 144)"/>
+          <rect x="14" y="162" width="42" height="9" rx="4.5" fill="#8BC3A3" transform="rotate(-8 35 166)"/>
+          <path d="M100 78 C100 48 130 48 130 78" fill="none" stroke="#8BC3A3" stroke-width="12" stroke-linecap="round"/>
+          <path d="M112 84 C100 66 106 44 126 34 C130 54 126 72 116 86 Z" fill="#8BC3A3"/>
+          <path d="M126 34 C142 40 148 60 138 80 L118 84 C122 66 122 48 126 34 Z" fill="#3A826D"/>
+          <circle cx="92" cy="78" r="20" fill="#D64541"/>
+          <path d="M86 60 C89 54 97 54 100 59" stroke="#3A826D" stroke-width="3.4" stroke-linecap="round" fill="none"/>
+          <path d="M148 88 C142 66 154 46 172 42 C176 62 172 82 156 90 C153 91 150 90 148 88 Z" fill="#EBB338"/>
+          <path d="M172 42 C177 40 181 43 180 48 C176 48 173 46 172 42 Z" fill="#B45309"/>
+          <rect x="60" y="84" width="110" height="112" rx="20" fill="#F4F8F6"/>
+          <g transform="translate(88,108)">
+            <path d="M0 76 L0 0 L28 0 C42 0 50 8 50 20 C50 30 44 37 34 39 L52 76 L36 76 L20 41 L16 41 L16 76 Z" fill="#1B4D3E"/>
+            <path d="M16 8 C10 16 10 26 18 32 C24 22 24 14 16 8 Z" fill="#8BC3A3"/>
+            <path d="M18 32 C26 30 32 22 30 12 C22 14 16 20 18 32 Z" fill="#3A826D"/>
+          </g>
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-lg font-extrabold text-white tracking-wider leading-none">RE<span class="text-[#EBB338]">SERVE</span></h1>
+          <span class="text-[9px] font-bold bg-[#3A826D]/40 text-[#8BC3A3] border border-[#8BC3A3]/30 px-2 py-0.5 rounded-md uppercase tracking-widest">Admin</span>
+        </div>
+        <p class="text-[10px] text-[#8BC3A3]/80 font-normal tracking-wide mt-0.5 hidden sm:block">Cebu Surplus Rescue Console</p>
+      </div>
+    </a>
+
+    <!-- Segmented Top Navigation Bar (SPA-Enabled) -->
+    <nav id="mainNavbar" class="hidden lg:flex flex-col lg:flex-row absolute lg:static top-full left-0 w-full lg:w-auto bg-[#12372C] lg:bg-[#1B4D3E]/70 p-4 lg:p-1 border-t lg:border border-white/10 lg:rounded-xl shadow-2xl lg:shadow-none gap-1.5 lg:gap-1 z-40">
+      <a href="/dashboard/" data-spa-link="true" data-nav-key="dashboard" class="admin-top-nav-link flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs transition-all {% if active_page == 'dashboard' %}font-semibold bg-[#3A826D] text-white shadow-sm{% else %}font-medium text-[#D8E3DD] hover:text-white hover:bg-white/5{% endif %}">
+        <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i><span>Dashboard</span>
+      </a>
+      <a href="/users/" data-spa-link="true" data-nav-key="users" class="admin-top-nav-link flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs transition-all {% if active_page == 'users' %}font-semibold bg-[#3A826D] text-white shadow-sm{% else %}font-medium text-[#D8E3DD] hover:text-white hover:bg-white/5{% endif %}">
+        <i data-lucide="users" class="w-3.5 h-3.5"></i><span>Users</span>
+      </a>
+      <a href="/food-listing/" data-spa-link="true" data-nav-key="food-listing" class="admin-top-nav-link flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs transition-all {% if active_page == 'food-listing' %}font-semibold bg-[#3A826D] text-white shadow-sm{% else %}font-medium text-[#D8E3DD] hover:text-white hover:bg-white/5{% endif %}">
+        <i data-lucide="utensils" class="w-3.5 h-3.5"></i><span>Food Listing</span>
+      </a>
+      <a href="/donations/" data-spa-link="true" data-nav-key="donations" class="admin-top-nav-link flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs transition-all {% if active_page == 'donations' %}font-semibold bg-[#3A826D] text-white shadow-sm{% else %}font-medium text-[#D8E3DD] hover:text-white hover:bg-white/5{% endif %}">
+        <i data-lucide="heart-handshake" class="w-3.5 h-3.5"></i><span>Donations</span>
+      </a>
+      <a href="/payouts/" data-spa-link="true" data-nav-key="payouts" class="admin-top-nav-link flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs transition-all {% if active_page == 'payouts' %}font-semibold bg-[#3A826D] text-white shadow-sm{% else %}font-medium text-[#D8E3DD] hover:text-white hover:bg-white/5{% endif %}">
+        <i data-lucide="wallet" class="w-3.5 h-3.5"></i><span>Payouts</span>
+      </a>
+      <a href="/announcements/" data-spa-link="true" data-nav-key="announcements" class="admin-top-nav-link flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs transition-all {% if active_page == 'announcements' %}font-semibold bg-[#3A826D] text-white shadow-sm{% else %}font-medium text-[#D8E3DD] hover:text-white hover:bg-white/5{% endif %}">
+        <i data-lucide="megaphone" class="w-3.5 h-3.5"></i><span>Announcements</span>
+      </a>
+    </nav>
+
+    <!-- Right Utility Controls -->
+    <div class="flex items-center gap-2.5 shrink-0">
+      <!-- Categorized Notifications Bell with Numeric Count Badge -->
+      <div class="relative">
+        <button id="notifMenuBtn" onclick="toggleNotifMenu()" class="w-9 h-9 bg-[#1B4D3E] hover:bg-[#3A826D] rounded-xl transition-all border border-white/10 flex items-center justify-center focus:outline-none relative">
+          <i data-lucide="bell" class="w-4 h-4 text-[#D8E3DD]"></i>
+          <span id="notifBadgeCount" class="hidden absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-[#B3261E] text-white text-[10px] font-bold rounded-full ring-2 ring-[#12372C] items-center justify-center leading-none">
+            0
+          </span>
+        </button>
+
+        <div id="notifDropdown" class="hidden absolute right-0 mt-2.5 w-80 sm:w-[420px] max-h-[480px] overflow-y-auto bg-white text-[#12372C] rounded-2xl shadow-2xl border border-[#DCE5DF] p-4 space-y-3 z-50 text-xs">
+          <div class="flex justify-between items-center border-b border-[#DCE5DF] pb-2.5 sticky top-0 bg-white z-10">
+            <div>
+              <h4 class="font-bold text-[#12372C] text-xs">Categorized System Alerts</h4>
+              <p class="text-[10px] text-[#4F695D]">Click any row to open &amp; mark as read</p>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span id="notifReadStatusPill" class="text-[9px] font-semibold bg-[#E8EFEA] text-[#1B4D3E] px-2 py-0.5 rounded-md uppercase">Live</span>
+              <button type="button" onclick="markAllAdminNotificationsRead()" class="text-[10px] font-semibold text-[#3A826D] hover:text-[#1B4D3E] underline">
+                Mark all read
+              </button>
+            </div>
+          </div>
+
+          <!-- Notification Category Filter Pills -->
+          <div class="flex gap-1.5 overflow-x-auto pb-1">
+            <button type="button" onclick="filterAdminNotifsByCategory('all', this)" class="notif-cat-btn px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-[#1B4D3E] text-white shrink-0">
+              All
+            </button>
+            <button type="button" onclick="filterAdminNotifsByCategory('compliance', this)" class="notif-cat-btn px-2.5 py-1 rounded-lg text-[10px] font-medium bg-[#F7F9F7] text-[#4F695D] border border-[#DCE5DF] hover:text-[#12372C] shrink-0">
+              Compliance &amp; Strikes
+            </button>
+            <button type="button" onclick="filterAdminNotifsByCategory('kyb', this)" class="notif-cat-btn px-2.5 py-1 rounded-lg text-[10px] font-medium bg-[#F7F9F7] text-[#4F695D] border border-[#DCE5DF] hover:text-[#12372C] shrink-0">
+              KYB &amp; Users
+            </button>
+            <button type="button" onclick="filterAdminNotifsByCategory('orders', this)" class="notif-cat-btn px-2.5 py-1 rounded-lg text-[10px] font-medium bg-[#F7F9F7] text-[#4F695D] border border-[#DCE5DF] hover:text-[#12372C] shrink-0">
+              Orders &amp; Payouts
+            </button>
+            <button type="button" onclick="filterAdminNotifsByCategory('donations', this)" class="notif-cat-btn px-2.5 py-1 rounded-lg text-[10px] font-medium bg-[#F7F9F7] text-[#4F695D] border border-[#DCE5DF] hover:text-[#12372C] shrink-0">
+              Donations &amp; Listings
+            </button>
+          </div>
+
+          <div id="pendingMerchantsNotifBanner">
+            {% if pending_merchants > 0 %}
+              <div onclick="handleAdminNotifClick(this)"
+                   data-notif-id="pending-merch-{{ pending_merchants }}"
+                   data-notif-type="KYB"
+                   data-notif-msg="Merchant registration pending review"
+                   class="admin-notif-item cursor-pointer flex items-center justify-between gap-2.5 text-amber-900 bg-[#FEF3C7] p-3 rounded-xl border border-amber-300 font-semibold hover:bg-amber-100 transition-all">
+                <div class="flex items-center gap-2.5">
+                  <span class="notif-unread-dot w-2 h-2 rounded-full bg-[#D97706] shrink-0"></span>
+                  <div>
+                    <div class="flex items-center gap-1.5 mb-0.5">
+                      <span class="text-[9px] font-bold uppercase bg-amber-600 text-white px-1.5 py-0.5 rounded">KYB Verification</span>
+                      <span class="notif-state-label text-[9px] font-bold text-[#B45309]">NEW</span>
+                    </div>
+                    <span class="text-[11px] block">{{ pending_merchants }} Pending Merchant Application(s) awaiting review</span>
+                  </div>
+                </div>
+                <span class="text-[10px] font-bold text-[#B45309] shrink-0">Review</span>
+              </div>
+            {% endif %}
+          </div>
+
+          <div id="liveNotifDropdownList" class="space-y-2">
+            {% for notif in recent_notifications %}
+              <div onclick="handleAdminNotifClick(this)"
+                   data-notif-id="notif-{{ notif.pk }}"
+                   data-notif-type="{{ notif.admin_notif_type }}"
+                   data-notif-msg="{{ notif.message|escapejs }}"
+                   class="admin-notif-item cursor-pointer group p-3 rounded-xl border transition-all {% if '3-STRIKE' in notif.message or 'No-Show' in notif.message %}bg-[#FBE4E1]/70 border-[#B3261E]/40{% else %}bg-[#E8EFEA] border-[#3A826D]/40{% endif %} space-y-1">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-1.5">
+                    <span class="notif-unread-dot w-2 h-2 rounded-full {% if '3-STRIKE' in notif.message or 'No-Show' in notif.message %}bg-[#B3261E]{% else %}bg-[#3A826D]{% endif %}"></span>
+                    <span class="notif-cat-badge text-[9px] font-bold uppercase px-2 py-0.5 rounded {% if '3-STRIKE' in notif.message or 'No-Show' in notif.message %}bg-[#B3261E] text-white{% else %}bg-[#1B4D3E] text-white{% endif %}">
+                      {{ notif.admin_notif_type }}
+                    </span>
+                    <span class="notif-state-label text-[9px] font-bold px-1.5 py-0.5 rounded bg-white/80 text-[#1B4D3E]">NEW</span>
+                  </div>
+                  <span class="text-[10px] text-[#4F695D] font-medium">
+                    {% if notif.created_at %}{{ notif.created_at|date:"M d, Y • h:i A" }}{% else %}Recent{% endif %}
+                  </span>
+                </div>
+                <p class="text-[11px] leading-relaxed text-[#12372C] font-medium">{{ notif.message }}</p>
+                <div class="flex justify-end pt-0.5">
+                  <span class="text-[10px] font-semibold text-[#3A826D] group-hover:translate-x-0.5 transition-transform">Open</span>
+                </div>
+              </div>
+            {% empty %}
+              <p class="text-[#4F695D] text-center py-6 text-xs">No system notifications found.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Admin Profile & Enterprise Settings Menu -->
+      <div class="relative">
+        <button id="adminMenuBtn" onclick="toggleAdminMenu()" class="flex items-center gap-2.5 bg-[#1B4D3E] hover:bg-[#3A826D] pl-2 pr-3 py-1.5 rounded-xl border border-white/10 cursor-pointer transition-all focus:outline-none">
+          <div class="w-6 h-6 rounded-lg bg-[#3A826D] text-white flex items-center justify-center font-bold text-[11px] border border-white/15">A</div>
+          <span class="text-xs font-medium text-white hidden sm:inline">System Admin</span>
+          <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-[#8BC3A3]"></i>
+        </button>
+        <div id="adminDropdown" class="hidden absolute right-0 mt-2.5 w-56 bg-white text-[#12372C] rounded-xl shadow-xl border border-[#DCE5DF] py-1.5 z-50 text-xs font-medium">
+          <div class="px-3.5 py-2 border-b border-[#DCE5DF] mb-1">
+            <p class="font-bold text-[#12372C] text-xs">Super Administrator</p>
+            <p class="text-[10px] text-[#4F695D] truncate">{{ admin_email|default:'admin@reserve.org' }}</p>
+          </div>
+          <button onclick="openAdminProfile('account')" class="w-full text-left px-3.5 py-2 hover:bg-[#F4F8F6] flex items-center gap-2 text-[#12372C]">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-[#3A826D]"></i> Account &amp; Security
+          </button>
+          <button onclick="openAdminProfile('governance')" class="w-full text-left px-3.5 py-2 hover:bg-[#F4F8F6] flex items-center gap-2 text-[#12372C]">
+            <i data-lucide="sliders" class="w-3.5 h-3.5 text-[#3A826D]"></i> Platform Governance
+          </button>
+          <button onclick="openAdminProfile('system')" class="w-full text-left px-3.5 py-2 hover:bg-[#F4F8F6] flex items-center gap-2 text-[#12372C]">
+            <i data-lucide="database" class="w-3.5 h-3.5 text-[#3A826D]"></i> Audit &amp; Master CSV Export
+          </button>
+          <div class="my-1 border-t border-[#DCE5DF]"></div>
+          <button onclick="handleLogout()" class="w-full text-left px-3.5 py-2 hover:bg-[#FBE4E1]/50 text-[#B3261E] flex items-center gap-2 font-semibold">
+            <i data-lucide="log-out" class="w-3.5 h-3.5"></i> Log Out Securely
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile Menu Trigger -->
+      <button onclick="toggleMobileNav()" class="lg:hidden w-9 h-9 bg-[#1B4D3E] hover:bg-[#3A826D] rounded-xl text-white flex items-center justify-center focus:outline-none border border-white/10">
+        <i data-lucide="menu" class="w-4 h-4"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- ========================================================================= -->
+  <!-- MAIN WORKSPACE CONTAINER (SWAPPED VIA SPA NAVIGATION)                     -->
+  <!-- ========================================================================= -->
+  <main id="adminMainWorkspace" class="flex-1 w-full max-w-[1440px] mx-auto px-4 md:px-8 py-6 space-y-5">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- ========================================================================= -->
+  <!-- UNIVERSAL OFFICIAL DIGITAL RECEIPT & HANDSHAKE AUDIT MODAL                -->
+  <!-- ========================================================================= -->
+  <div id="adminDigitalReceiptModal" style="z-index: 9996;" class="modal-overlay hidden fixed inset-0 bg-[#12372C]/60 backdrop-blur-xs flex justify-center items-center p-4">
+    <div class="bg-[#F4F8F6] rounded-2xl w-full max-w-[520px] max-h-[92vh] overflow-y-auto shadow-2xl border border-[#DCE5DF] relative">
+      <div class="sticky top-0 z-30 bg-white px-6 py-4 border-b border-[#DCE5DF] flex justify-between items-center">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-[#E8EFEA] flex items-center justify-center text-[#1B4D3E]">
+            <i data-lucide="receipt" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 id="drModalId" class="font-bold text-[#12372C] text-sm">Official Digital Receipt</h3>
+            <p id="drModalType" class="text-[10px] text-[#4F695D] font-medium">RESERVE Cebu Transaction &amp; Handshake Record</p>
+          </div>
+        </div>
+        <button onclick="closeModal('adminDigitalReceiptModal')" class="w-8 h-8 rounded-full bg-[#F4F8F6] hover:bg-[#E8EFEA] text-[#12372C] border border-[#DCE5DF] flex items-center justify-center font-bold text-xs cursor-pointer">✕</button>
+      </div>
+
+      <div class="p-5 space-y-4 text-xs">
+        <div class="bg-white p-5 rounded-xl border border-[#DCE5DF] shadow-2xs space-y-4">
+          <div class="flex justify-between items-start border-b border-[#DCE5DF] pb-3">
+            <div>
+              <span class="text-[10px] font-medium text-[#4F695D] block">Voucher / Batch Reference</span>
+              <p class="font-mono font-bold text-base text-[#1B4D3E]" id="drModalVoucher">OID-000</p>
+              <span class="text-[10px] text-[#4F695D]" id="drModalGatewayRef">Gateway Ref: —</span>
+            </div>
+            <span id="drModalStatusBadge" class="bg-[#E4F0E8] text-[#1F6B52] px-3 py-1 rounded-lg text-[10px] font-semibold uppercase">COMPLETED</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 text-[11px]">
+            <div class="bg-[#F7F9F7] p-3 rounded-xl border border-[#DCE5DF]">
+              <span class="text-[9px] font-semibold uppercase text-[#4F695D] block">Establishment / Donor</span>
+              <p class="font-bold text-[#12372C] mt-0.5" id="drModalMerchant">...</p>
+              <p class="text-[10px] text-[#4F695D]" id="drModalMerchantPhone">...</p>
+              <p class="text-[10px] text-[#4F695D] truncate" id="drModalAddress">...</p>
+            </div>
+            <div class="bg-[#F7F9F7] p-3 rounded-xl border border-[#DCE5DF]">
+              <span class="text-[9px] font-semibold uppercase text-[#4F695D] block">Recipient / Buyer</span>
+              <p class="font-bold text-[#12372C] mt-0.5" id="drModalBuyer">...</p>
+              <p class="text-[10px] text-[#4F695D]" id="drModalBuyerPhone">...</p>
+              <p class="text-[10px] text-[#3A826D] font-medium truncate" id="drModalBuyerEmail">...</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 text-[11px] border-y border-[#DCE5DF] py-2.5">
+            <div>
+              <span class="text-[10px] text-[#4F695D] block">Timestamp Logged</span>
+              <strong class="text-[#12372C] font-semibold" id="drModalDate">...</strong>
+            </div>
+            <div>
+              <span class="text-[10px] text-[#4F695D] block">Expiry / Handshake Info</span>
+              <strong class="text-[#B3261E] font-semibold" id="drModalDeadline">...</strong>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <span class="text-[10px] font-semibold uppercase text-[#4F695D] block">Itemized Manifest</span>
+            <div id="drModalItemsList" class="space-y-1.5"></div>
+          </div>
+
+          <div class="bg-[#E8EFEA]/60 p-3.5 rounded-xl border border-[#DCE5DF] space-y-1.5">
+            <div class="flex justify-between text-[#4F695D]">
+              <span>Total Rescue Value (100%):</span>
+              <strong class="text-[#12372C] font-semibold" id="drModalTotal">₱0.00</strong>
+            </div>
+            <div class="flex justify-between text-[#4F695D]">
+              <span>20% Online Deposit (Xendit):</span>
+              <strong class="text-[#3A826D] font-semibold" id="drModalDeposit">₱0.00</strong>
+            </div>
+            <div class="flex justify-between border-t border-[#DCE5DF] pt-1.5 text-[#12372C]">
+              <span class="font-bold">80% Cash at Store Pickup:</span>
+              <strong class="text-[#1B4D3E] text-sm font-bold" id="drModalRemaining">₱0.00</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-6 py-3.5 bg-white border-t border-[#DCE5DF] flex justify-end">
+        <button onclick="closeModal('adminDigitalReceiptModal')" class="bg-[#3A826D] hover:bg-[#1B4D3E] text-white font-semibold text-xs px-6 py-2.5 rounded-xl transition-colors cursor-pointer">
+          Close Receipt
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- ENTERPRISE ADMIN SETTINGS & GOVERNANCE CONSOLE MODAL                      -->
+  <!-- ========================================================================= -->
+  <div id="adminProfileModal" class="modal-overlay hidden fixed inset-0 bg-[#12372C]/60 backdrop-blur-xs flex justify-center items-center z-50 p-4">
+    <div class="bg-[#F4F8F6] rounded-2xl w-full max-w-[680px] max-h-[92vh] overflow-y-auto shadow-2xl border border-[#DCE5DF] flex flex-col justify-between relative">
+      <div class="sticky top-0 z-30 bg-white px-6 py-4 border-b border-[#DCE5DF] flex justify-between items-center">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-[#1B4D3E] text-white flex items-center justify-center font-bold text-sm">
+            <i data-lucide="settings" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-[#12372C] text-base">Enterprise Admin Settings &amp; Governance</h3>
+            <p class="text-[11px] text-[#4F695D]">Manage administrator credentials, security policies, and platform-wide thresholds</p>
+          </div>
+        </div>
+        <button onclick="toggleModal('adminProfileModal')" class="w-8 h-8 rounded-full bg-[#F4F8F6] hover:bg-[#E8EFEA] text-[#12372C] border border-[#DCE5DF] flex items-center justify-center font-bold text-xs cursor-pointer">✕</button>
+      </div>
+
+      <!-- Settings Navigation Tabs -->
+      <div class="bg-white px-6 pt-2.5 border-b border-[#DCE5DF] flex gap-2 overflow-x-auto">
+        <button type="button" id="adminSetTabBtn-account" onclick="switchAdminSettingsTab('account', this)" class="admin-settings-tab px-4 py-2 text-xs font-semibold border-b-2 border-[#1B4D3E] text-[#1B4D3E]">
+          1. Account &amp; Security
+        </button>
+        <button type="button" id="adminSetTabBtn-governance" onclick="switchAdminSettingsTab('governance', this)" class="admin-settings-tab px-4 py-2 text-xs font-medium border-b-2 border-transparent text-[#4F695D] hover:text-[#12372C]">
+          2. Platform Governance
+        </button>
+        <button type="button" id="adminSetTabBtn-system" onclick="switchAdminSettingsTab('system', this)" class="admin-settings-tab px-4 py-2 text-xs font-medium border-b-2 border-transparent text-[#4F695D] hover:text-[#12372C]">
+          3. Audit &amp; Master CSV Export
+        </button>
+      </div>
+
+      <!-- TAB 1: ACCOUNT & SECURITY -->
+      <div id="adminSetPanel-account" class="admin-settings-panel p-5 space-y-4 text-xs">
+        <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-3">
+          <div class="flex items-center justify-between border-b border-[#DCE5DF] pb-2">
+            <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider">Administrator Identity</h4>
+            <span class="bg-[#E4F0E8] text-[#1F6B52] text-[10px] font-semibold px-2.5 py-0.5 rounded-md">RBAC: Super Admin</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="font-semibold text-[#4F695D] text-[11px] block mb-1">Security Clearance Role</label>
+              <input type="text" class="w-full px-3 py-2.5 bg-[#F7F9F7] border border-[#DCE5DF] rounded-xl font-semibold text-xs text-[#1B4D3E]" value="Super Administrator (Cebu Node)" readonly>
+            </div>
+            <div>
+              <label class="font-semibold text-[#4F695D] text-[11px] block mb-1">Official Admin Work Email *</label>
+              <input type="email" id="adminProfileEmailInput" class="w-full px-3 py-2.5 bg-white border border-[#DCE5DF] rounded-xl font-medium text-xs text-[#12372C] focus:outline-none focus:border-[#1B4D3E]" value="{{ admin_email|default:'admin@reserve.org' }}">
+            </div>
+          </div>
+          <div class="flex justify-end pt-1">
+            <button type="button" onclick="saveAdminProfile()" class="bg-[#3A826D] hover:bg-[#1B4D3E] text-white px-4 py-2 rounded-xl font-semibold text-xs transition-colors">
+              Update Work Email
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-3">
+          <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider border-b border-[#DCE5DF] pb-2">Change Administrator Password</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="font-semibold text-[#4F695D] text-[11px] block mb-1">Current Password</label>
+              <input type="password" id="adminCurrentPwInput" placeholder="••••••••" class="w-full px-3 py-2.5 bg-[#F7F9F7] border border-[#DCE5DF] rounded-xl text-xs focus:outline-none focus:border-[#1B4D3E] focus:bg-white">
+            </div>
+            <div>
+              <label class="font-semibold text-[#4F695D] text-[11px] block mb-1">New Password *</label>
+              <input type="password" id="adminNewPwInput" placeholder="Min. 6 characters" class="w-full px-3 py-2.5 bg-[#F7F9F7] border border-[#DCE5DF] rounded-xl text-xs focus:outline-none focus:border-[#1B4D3E] focus:bg-white">
+            </div>
+            <div>
+              <label class="font-semibold text-[#4F695D] text-[11px] block mb-1">Confirm New Password *</label>
+              <input type="password" id="adminConfirmPwInput" placeholder="Re-enter password" class="w-full px-3 py-2.5 bg-[#F7F9F7] border border-[#DCE5DF] rounded-xl text-xs focus:outline-none focus:border-[#1B4D3E] focus:bg-white">
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <span class="text-[11px] text-[#4F695D]">Updates your login credentials immediately without logging out.</span>
+            <button type="button" onclick="changeAdminPassword()" class="bg-[#1B4D3E] hover:bg-[#12372C] text-white px-4 py-2 rounded-xl font-semibold text-xs transition-colors">
+              Update Password
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: PLATFORM GOVERNANCE & THRESHOLDS -->
+      <div id="adminSetPanel-governance" class="admin-settings-panel hidden p-5 space-y-4 text-xs">
+        <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-3.5">
+          <div class="border-b border-[#DCE5DF] pb-2">
+            <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider">Operational, Subscription &amp; Compliance Thresholds</h4>
+            <p class="text-[11px] text-[#4F695D] mt-0.5">Live database &amp; engine parameters enforced across Consumer, Merchant, and Food Bank portals</p>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div class="bg-[#F7F9F7] p-3 rounded-xl border border-[#DCE5DF]">
+              <label class="font-semibold text-[#12372C] text-[11px] block">Consumer No-Show Strike Limit</label>
+              <p class="text-[10px] text-[#4F695D] mb-2">Triggers automatic Admin Suspension Alert</p>
+              <input type="number" id="govStrikeLimit" value="{{ gov_config.strike_limit|default:3 }}" min="1" max="10" class="w-full px-3 py-2 bg-white border border-[#DCE5DF] rounded-lg font-bold text-xs text-[#1B4D3E]">
+            </div>
+
+            <div class="bg-[#F7F9F7] p-3 rounded-xl border border-[#DCE5DF]">
+              <label class="font-semibold text-[#12372C] text-[11px] block">Haversine Discovery Radius (km)</label>
+              <p class="text-[10px] text-[#4F695D] mb-2">Default Cebu City matching radius for Consumers &amp; NGOs</p>
+              <input type="number" step="0.5" id="govRadiusKm" value="{{ gov_config.radius_km|default:10 }}" min="1" max="50" class="w-full px-3 py-2 bg-white border border-[#DCE5DF] rounded-lg font-bold text-xs text-[#1B4D3E]">
+            </div>
+
+            <div class="bg-[#F7F9F7] p-3 rounded-xl border border-[#DCE5DF]">
+              <label class="font-semibold text-[#12372C] text-[11px] block">Free Tier Weekly Listing Cap</label>
+              <p class="text-[10px] text-[#4F695D] mb-2">Maximum weekly listings for Basic (Tier 1) Merchants</p>
+              <input type="number" id="govFreeCap" value="{{ gov_config.free_cap|default:10 }}" min="1" max="100" class="w-full px-3 py-2 bg-white border border-[#DCE5DF] rounded-lg font-bold text-xs text-[#1B4D3E]">
+            </div>
+
+            <div class="bg-[#F7F9F7] p-3 rounded-xl border border-[#DCE5DF]">
+              <label class="font-semibold text-[#12372C] text-[11px] block">Basic Tier Commission Rate (%)</label>
+              <p class="text-[10px] text-[#4F695D] mb-2">Platform fee settled from 20% online deposit on Basic Tier</p>
+              <input type="number" step="0.5" id="govCommissionPct" value="{{ gov_config.commission_pct|default:10 }}" min="0" max="50" class="w-full px-3 py-2 bg-white border border-[#DCE5DF] rounded-lg font-bold text-xs text-[#1B4D3E]">
+            </div>
+
+            <div class="sm:col-span-2 bg-[#FEF3C7]/60 p-3.5 rounded-xl border border-amber-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <label class="font-bold text-[#92400E] text-xs block">Premium Pro Monthly Subscription Price (₱ / Month)</label>
+                <p class="text-[10px] text-[#78350F] mt-0.5">Monthly subscription fee for Pro Merchants (unlocks Unlimited Listings &amp; 4% Low Commission)</p>
+              </div>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <span class="font-bold text-sm text-[#B45309]">₱</span>
+                <input type="number" step="1" id="govPremiumPrice" value="{{ gov_config.premium_monthly_price|default:149 }}" min="0" max="10000" class="w-32 px-3 py-2 bg-white border border-amber-300 rounded-lg font-bold text-xs text-[#B45309]">
+              </div>
+            </div>
+          </div>
+
+          <div class="flex justify-end pt-1">
+            <button type="button" onclick="savePlatformGovernanceSettings()" class="bg-[#3A826D] hover:bg-[#1B4D3E] text-white px-5 py-2.5 rounded-xl font-semibold text-xs transition-colors">
+              Save Governance Thresholds
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: AUDIT & MASTER MULTI-TABLE CSV EXPORT -->
+      <div id="adminSetPanel-system" class="admin-settings-panel hidden p-5 space-y-4 text-xs">
+        <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-3">
+          <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider border-b border-[#DCE5DF] pb-2">Notification &amp; Session Cache</h4>
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <p class="font-semibold text-[#12372C]">Reset Read Notification History</p>
+              <p class="text-[11px] text-[#4F695D]">Marks all operational notifications as unread ("NEW") in the top bell dropdown.</p>
+            </div>
+            <button type="button" onclick="resetAdminReadNotifications()" class="bg-[#E8EFEA] hover:bg-[#3A826D] text-[#1B4D3E] hover:text-white font-semibold text-xs px-4 py-2 rounded-xl shrink-0 transition-colors">
+              Reset Unread Badge
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-3">
+          <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider border-b border-[#DCE5DF] pb-2">Full Enterprise Master Audit Export (CSV)</h4>
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <p class="font-semibold text-[#12372C]">Export All System Tables to CSV (Users, Listings, Donations &amp; Payouts)</p>
+              <p class="text-[11px] text-[#4F695D]">Compiles all database records across Consumers, Merchants, Food Banks, Food Listings, Donation Appeals/Dispatches, and Payout Requests into one unified CSV file.</p>
+            </div>
+            <button type="button" onclick="exportActiveTableToCSV()" class="bg-[#1B4D3E] hover:bg-[#12372C] text-white font-semibold text-xs px-4 py-2.5 rounded-xl shrink-0 transition-colors flex items-center gap-1.5">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i> Export Master CSV
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-6 py-3.5 bg-white border-t border-[#DCE5DF] flex justify-between items-center">
+        <span class="text-[10px] text-[#4F695D]">ReServe Enterprise Console v5.7 • Live Auto-Sync Active</span>
+        <button onclick="toggleModal('adminProfileModal')" class="bg-[#F7F9F7] border border-[#DCE5DF] text-[#12372C] px-5 py-2 rounded-xl font-semibold text-xs hover:bg-[#E8EFEA]">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MOBILE-MATCHED ALERT MODAL -->
+  <div id="themeAlertModal" style="z-index: 9999;" class="modal-overlay hidden fixed inset-0 bg-[#12372C]/60 backdrop-blur-xs justify-center items-center p-4">
+    <div class="bg-white rounded-2xl w-full max-w-sm shadow-2xl border border-[#DCE5DF] flex flex-col overflow-hidden p-6">
+      <div class="flex items-center gap-3 mb-3">
+        <div id="themeAlertIconWrap" class="w-10 h-10 rounded-full bg-[#E8EFEA] text-[#1B4D3E] flex items-center justify-center shrink-0">
+          <i id="themeAlertIcon" data-lucide="check-circle" class="w-5 h-5"></i>
+        </div>
+        <h3 id="themeAlertTitle" class="font-bold text-[#12372C] text-base">Notification</h3>
+      </div>
+      <p id="themeAlertMessage" class="text-xs text-[#4F695D] leading-relaxed mb-5">Message goes here.</p>
+      <button id="themeAlertBtn" class="bg-[#3A826D] hover:bg-[#1B4D3E] text-white font-semibold text-xs py-2.5 rounded-xl transition-all w-full">Okay</button>
+    </div>
+  </div>
+
+  <!-- MOBILE-MATCHED CONFIRM MODAL -->
+  <div id="themeConfirmModal" style="z-index: 9999;" class="modal-overlay hidden fixed inset-0 bg-[#12372C]/60 backdrop-blur-xs justify-center items-center p-4">
+    <div class="bg-white rounded-2xl w-full max-w-sm shadow-2xl border border-[#DCE5DF] flex flex-col overflow-hidden p-6">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="w-10 h-10 rounded-full bg-[#FEF3C7] text-[#B45309] flex items-center justify-center shrink-0">
+          <i data-lucide="help-circle" class="w-5 h-5"></i>
+        </div>
+        <h3 id="themeConfirmTitle" class="font-bold text-[#12372C] text-base">Please Confirm</h3>
+      </div>
+      <p id="themeConfirmMessage" class="text-xs text-[#4F695D] leading-relaxed mb-5">Are you sure you want to proceed?</p>
+      <div class="flex gap-2.5">
+        <button id="themeConfirmCancel" class="bg-white border border-[#DCE5DF] text-[#4F695D] font-semibold text-xs py-2.5 rounded-xl hover:bg-[#F4F8F6] transition-all flex-1">Cancel</button>
+        <button id="themeConfirmOk" class="bg-[#3A826D] hover:bg-[#1B4D3E] text-white font-semibold text-xs py-2.5 rounded-xl transition-all flex-1">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      if (window.lucide) lucide.createIcons();
+    });
+  </script>
+  <script src="{% static 'js/main.js' %}?v=5.7"></script>
+</body>
+</html>

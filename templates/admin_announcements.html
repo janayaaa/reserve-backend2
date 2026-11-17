@@ -1,0 +1,100 @@
+{% extends 'base_admin.html' %}
+
+{% block title %}ReServe Admin - System Announcements{% endblock %}
+
+{% block content %}
+  <div>
+    <h2 class="text-2xl font-bold text-[#12372C] tracking-tight">System Announcements &amp; Broadcasts</h2>
+    <p class="text-xs text-[#4F695D] mt-0.5">Publish real-time announcements to Merchants, Food Banks, and Consumers from their registration date onward</p>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+    <!-- Broadcast Composer -->
+    <form onsubmit="handleAnnouncementSubmit(event)" class="lg:col-span-5 bg-white p-5 rounded-2xl border border-[#DCE5DF] shadow-2xs space-y-4 h-fit">
+      <div class="border-b border-[#DCE5DF] pb-3">
+        <h4 class="font-bold text-[#12372C] text-sm">Compose New Broadcast</h4>
+        <p class="text-[11px] text-[#4F695D]">Select target portal audience and message details</p>
+      </div>
+
+      <div>
+        <label class="block text-[11px] font-semibold text-[#12372C] mb-1.5">Target Audience *</label>
+        <select id="announcementAudience" class="w-full p-3 border border-[#DCE5DF] rounded-xl text-xs bg-[#F7F9F7] text-[#12372C] focus:outline-none focus:border-[#1B4D3E] font-medium">
+          <option value="All Users (System-wide)">All Users (System-wide)</option>
+          <option value="Merchants Only">Merchants Only</option>
+          <option value="Food Banks / NGOs Only">Food Banks / NGOs Only</option>
+          <option value="Consumers Only">Consumers Only</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-[11px] font-semibold text-[#12372C] mb-1.5">Headline / Subject *</label>
+        <input id="announcementTitle" type="text" placeholder="e.g. Scheduled System Upgrade" required class="w-full p-3 border border-[#DCE5DF] rounded-xl text-xs bg-[#F7F9F7] text-[#12372C] placeholder-[#4F695D]/70 focus:outline-none focus:border-[#1B4D3E] focus:bg-white font-medium">
+      </div>
+
+      <div>
+        <label class="block text-[11px] font-semibold text-[#12372C] mb-1.5">Announcement Body *</label>
+        <textarea id="announcementBody" rows="4" placeholder="Enter full broadcast details..." required class="w-full p-3 border border-[#DCE5DF] rounded-xl text-xs bg-[#F7F9F7] text-[#12372C] placeholder-[#4F695D]/70 focus:outline-none focus:border-[#1B4D3E] focus:bg-white font-normal"></textarea>
+      </div>
+
+      <button type="submit" class="w-full bg-[#3A826D] hover:bg-[#1B4D3E] text-white text-xs font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2">
+        <i data-lucide="send" class="w-4 h-4"></i>
+        <span>Publish Broadcast</span>
+      </button>
+    </form>
+
+    <!-- Broadcast History with Search & Sort Toolbar -->
+    <div class="lg:col-span-7 bg-white p-5 rounded-2xl border border-[#DCE5DF] shadow-2xs space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[#DCE5DF] pb-3">
+        <div>
+          <h4 class="font-bold text-[#12372C] text-sm">Published Broadcast Ledger</h4>
+          <p class="text-[11px] text-[#4F695D]">Search or sort announcements across all mobile portals</p>
+        </div>
+      </div>
+
+      <!-- Search & Sort Control Bar -->
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+        <div class="relative flex-1">
+          <i data-lucide="search" class="w-4 h-4 text-[#4F695D] absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+          <input type="text"
+                 id="announcementSearchInput"
+                 oninput="filterAndSortAnnouncements()"
+                 placeholder="Search broadcast headline, message, audience, or ID..."
+                 class="w-full pl-10 pr-4 py-2.5 bg-[#F7F9F7] rounded-xl text-xs border border-[#DCE5DF] text-[#12372C] placeholder-[#4F695D]/70 focus:outline-none focus:border-[#1B4D3E] focus:bg-white transition-all">
+        </div>
+
+        <select id="announcementSortSelect"
+                onchange="filterAndSortAnnouncements()"
+                class="px-3.5 py-2.5 bg-[#F7F9F7] text-[#12372C] border border-[#DCE5DF] rounded-xl text-xs font-semibold focus:outline-none focus:border-[#1B4D3E] cursor-pointer">
+          <option value="id-desc">Sort: Newest First</option>
+          <option value="id-asc">Sort: Oldest First</option>
+          <option value="title-asc">Headline (A–Z)</option>
+          <option value="title-desc">Headline (Z–A)</option>
+          <option value="audience-asc">Audience (A–Z)</option>
+        </select>
+      </div>
+
+      <div id="announcementHistoryList" class="space-y-3 max-h-[460px] overflow-y-auto pr-1">
+        {% for b in broadcasts %}
+        <div id="broadcast-card-{{ b.id }}"
+             data-id="{{ b.id }}"
+             data-title="{{ b.title|lower }}"
+             data-audience="{{ b.audience|lower }}"
+             data-search="{{ b.id }} {{ b.title|lower }} {{ b.body|lower }} {{ b.audience|lower }}"
+             class="broadcast-card-item border border-[#DCE5DF] p-4 rounded-xl bg-[#F7F9F7] hover:bg-white flex justify-between items-start transition-all">
+          <div class="pr-3">
+            <span class="text-[10px] font-semibold uppercase bg-[#E8EFEA] text-[#1B4D3E] px-2.5 py-1 rounded-md border border-[#D5E3D9]">{{ b.audience }}</span>
+            <h5 class="font-semibold text-sm text-[#12372C] mt-2">{{ b.title }}</h5>
+            <p class="text-xs text-[#4F695D] mt-1 leading-relaxed">{{ b.body }}</p>
+            <p class="text-[10px] text-[#4F695D] font-medium mt-2.5">Published {{ b.created_at_str|default:"Official Broadcast" }}</p>
+          </div>
+          <button onclick="deleteAnnouncement('{{ b.id }}')" class="w-8 h-8 rounded-lg bg-white hover:bg-[#FBE4E1] border border-[#DCE5DF] text-[#4F695D] hover:text-[#B3261E] flex items-center justify-center shrink-0 transition-colors" title="Delete Broadcast">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+          </button>
+        </div>
+        {% empty %}
+        <p id="emptyBroadcastMsg" class="text-center text-[#4F695D] text-xs py-10">No announcements published yet. Create your first broadcast on the left.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+{% endblock %}

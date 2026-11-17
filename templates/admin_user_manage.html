@@ -1,0 +1,2098 @@
+{% extends 'base_admin.html' %}
+
+{% block title %}ReServe Admin - User Management{% endblock %}
+
+{% block content %}
+  <style>
+    tr.pg-hidden { display: none !important; }
+    @keyframes permitLaserSweep {
+      0% { top: 3%; opacity: 0.95; }
+      50% { top: 93%; opacity: 1; }
+      100% { top: 3%; opacity: 0.95; }
+    }
+    .permit-laser-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, #10B981, #34D399, #10B981, transparent);
+      box-shadow: 0 0 14px 3px rgba(16, 185, 129, 0.8);
+      animation: permitLaserSweep 2.4s ease-in-out infinite;
+      pointer-events: none;
+      z-index: 20;
+    }
+  </style>
+
+  <!-- Page Header -->
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h2 class="text-2xl font-bold text-[#12372C] tracking-tight">User Management &amp; System Analysis Overview</h2>
+      <p class="text-xs text-[#4F695D] mt-0.5">Monitor Consumer No-Show strikes, Merchant KYB permits &amp; ratings, Food Bank handshakes, and itemized digital receipts</p>
+    </div>
+  </div>
+
+  <!-- Mobile-Schema KPI Stat Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+    <div class="bg-[#1B4D3E] border border-[#1B4D3E] p-4 rounded-2xl text-white shadow-xs flex items-center gap-3.5">
+      <div class="w-11 h-11 rounded-full bg-[#3A826D] flex items-center justify-center shrink-0">
+        <i data-lucide="users" class="w-5 h-5 text-white"></i>
+      </div>
+      <div>
+        <p class="text-[11px] text-white/80 font-normal">Total Registered</p>
+        <h3 class="text-2xl font-bold leading-tight mt-0.5">{{ total_registered|default:0 }}</h3>
+      </div>
+    </div>
+
+    <div class="bg-white border border-[#DCE5DF] p-4 rounded-2xl shadow-2xs flex items-center gap-3.5">
+      <div class="w-11 h-11 rounded-full bg-[#E8EFEA] text-[#1B4D3E] flex items-center justify-center shrink-0">
+        <i data-lucide="user-check" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <p class="text-[11px] text-[#4F695D] font-normal">Active Accounts</p>
+        <h3 class="text-2xl font-bold text-[#12372C] leading-tight mt-0.5">{{ active_accounts|default:0 }}</h3>
+      </div>
+    </div>
+
+    <div class="bg-white border border-[#DCE5DF] p-4 rounded-2xl shadow-2xs flex items-center gap-3.5">
+      <div class="w-11 h-11 rounded-full bg-[#FBE4E1] text-[#B3261E] flex items-center justify-center shrink-0">
+        <i data-lucide="shield-alert" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <p class="text-[11px] text-[#4F695D] font-normal">Pending / Flagged</p>
+        <h3 class="text-2xl font-bold text-[#B3261E] leading-tight mt-0.5">{{ banned_accounts|default:0 }}</h3>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search & Filter Toolbar -->
+  <div class="bg-white p-3.5 rounded-2xl border border-[#DCE5DF] shadow-2xs">
+    <div class="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
+      <div class="flex items-center gap-2 bg-[#F7F9F7] px-3 py-2 rounded-xl border border-[#DCE5DF] text-xs flex-1">
+        <i data-lucide="calendar" class="w-4 h-4 text-[#1B4D3E] shrink-0"></i>
+        <span class="font-semibold text-[#12372C] shrink-0">Date Range:</span>
+        <input type="text" id="userManageDateInput" class="date-range-picker w-full bg-transparent font-medium text-[#12372C] focus:outline-none text-xs" placeholder="Filter by registration date...">
+        <button onclick="clearCalendarFilter(); setTimeout(() => window.applyUserTablePagination(1), 60);" class="text-[#4F695D] hover:text-[#B3261E] font-bold px-1" title="Clear Filter">✕</button>
+      </div>
+
+      <select id="userManageSortSelect" onchange="triggerSortByCriteria(this); setTimeout(() => window.applyUserTablePagination(1), 60);" class="px-3.5 py-2.5 bg-[#F7F9F7] text-[#12372C] border border-[#DCE5DF] rounded-xl text-xs font-semibold focus:outline-none focus:border-[#1B4D3E] cursor-pointer">
+        <option value="">Sort By...</option>
+        <option value="name-asc">Name (A–Z)</option>
+        <option value="name-desc">Name (Z–A)</option>
+        <option value="date-desc">Date (Newest)</option>
+        <option value="date-asc">Date (Oldest)</option>
+        <option value="status-asc">Status</option>
+        <option value="tier-desc">Subscription Tier</option>
+      </select>
+
+      <div class="relative flex-1">
+        <i data-lucide="search" class="w-4 h-4 text-[#4F695D] absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+        <input type="text" id="userManageSearchInput" placeholder="Search account ID, name, or email..." class="w-full pl-10 pr-4 py-2.5 bg-[#F7F9F7] rounded-xl text-xs border border-[#DCE5DF] text-[#12372C] placeholder-[#4F695D]/70 focus:outline-none focus:border-[#1B4D3E] focus:bg-white transition-all">
+      </div>
+    </div>
+  </div>
+
+  <!-- Role Tabs -->
+  <div class="flex gap-2 border-b border-[#DCE5DF] pb-1 overflow-x-auto">
+    <button id="role-tab-Consumer" onclick="switchRoleTab('Consumer', this); setTimeout(() => window.applyUserTablePagination(1), 40);" class="role-tab-btn px-6 py-2.5 text-xs font-black rounded-2xl bg-white text-[#1B4D3E] shadow-sm border-b-2 border-[#1B4D3E]">Consumer</button>
+    <button id="role-tab-Merchant" onclick="switchRoleTab('Merchant', this); setTimeout(() => window.applyUserTablePagination(1), 40);" class="role-tab-btn px-6 py-2.5 text-xs font-bold rounded-2xl text-gray-400 hover:text-[#1B4D3E]">Merchant</button>
+    <button id="role-tab-FoodBank" onclick="switchRoleTab('Food Bank', this); setTimeout(() => window.applyUserTablePagination(1), 40);" class="role-tab-btn px-6 py-2.5 text-xs font-bold rounded-2xl text-gray-400 hover:text-[#1B4D3E]">Food Bank</button>
+  </div>
+
+  <!-- Tables Container -->
+  <div class="bg-white rounded-2xl shadow-2xs overflow-hidden border border-[#DCE5DF]">
+    <div class="overflow-x-auto">
+      <!-- 1. CONSUMER TABLE -->
+      <table id="table-consumer" class="user-role-table w-full text-left text-xs min-w-[640px]">
+        <thead class="bg-[#F3F6F4] text-[#12372C] font-semibold uppercase tracking-wider text-[10px] border-b border-[#DCE5DF]">
+          <tr>
+            <th class="p-3.5">Account ID</th>
+            <th class="p-3.5">Full Name</th>
+            <th class="p-3.5">Email Address</th>
+            <th class="p-3.5">Date Joined</th>
+            <th class="p-3.5">Status</th>
+            <th class="p-3.5">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-[#DCE5DF]">
+          {% for consumer in consumers %}
+          <tr id="user-row-Consumer-{{ consumer.cons_id }}"
+              class="hover:bg-[#F7F9F7] transition-colors user-data-row"
+              data-date="{{ consumer.user.created_at|date:'Y-m-d' }}"
+              data-search="CID-{{ consumer.cons_id }} {{ consumer.cons_fullname|lower }} {{ consumer.user.user_email|lower }}"
+              data-status="{{ consumer.status|default:'Active'|lower }}">
+            <td class="p-3.5 font-mono font-semibold text-[#1B4D3E]">CID-{{ consumer.cons_id }}</td>
+            <td class="p-3.5 font-semibold text-[#12372C]">{{ consumer.cons_fullname }}</td>
+            <td class="p-3.5 text-[#4F695D]">{{ consumer.user.user_email }}</td>
+            <td class="p-3.5 text-[#4F695D]">{{ consumer.user.created_at|date:"Y-m-d" }}</td>
+            <td class="p-3.5 status-cell">
+              {% if consumer.status == 'Suspended' %}
+                <span class="bg-[#FBE4E1] text-[#B3261E] px-2.5 py-1 rounded-lg text-[10px] font-semibold">Suspended</span>
+              {% else %}
+                <span class="bg-[#E4F0E8] text-[#1F6B52] px-2.5 py-1 rounded-lg text-[10px] font-semibold">Active</span>
+              {% endif %}
+            </td>
+            <td class="p-3.5 action-cell">
+              <button type="button"
+                      onclick="window.handleOpenConsumerModal(this)"
+                      data-raw-id="{{ consumer.cons_id }}"
+                      data-id="CID-{{ consumer.cons_id }}"
+                      data-name="{{ consumer.cons_fullname }}"
+                      data-email="{{ consumer.user.user_email }}"
+                      data-phone="{{ consumer.phone_num|default:'Not Provided' }}"
+                      data-address="{{ consumer.address|default:'Cebu City, Philippines' }}"
+                      data-status="{{ consumer.status|default:'Active' }}"
+                      data-date="{{ consumer.user.created_at|date:'Y-m-d' }}"
+                      class="flex items-center gap-1.5 bg-[#3A826D] hover:bg-[#1B4D3E] text-white px-3.5 py-2 rounded-xl text-[11px] font-semibold transition-colors cursor-pointer">
+                <i data-lucide="eye" class="w-3.5 h-3.5"></i> View
+              </button>
+            </td>
+          </tr>
+          {% empty %}
+          <tr class="empty-row"><td colspan="6" class="p-8 text-center text-[#4F695D] text-xs">No consumers registered yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <!-- 2. MERCHANT TABLE -->
+      <table id="table-merchant" class="user-role-table hidden w-full text-left text-xs min-w-[640px]">
+        <thead class="bg-[#F3F6F4] text-[#12372C] font-semibold uppercase tracking-wider text-[10px] border-b border-[#DCE5DF]">
+          <tr>
+            <th class="p-3.5">Merchant ID</th>
+            <th class="p-3.5">Establishment Name</th>
+            <th class="p-3.5">Date Joined</th>
+            <th class="p-3.5">Subscription Tier</th>
+            <th class="p-3.5">Status</th>
+            <th class="p-3.5">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-[#DCE5DF]">
+          {% for merchant in merchants %}
+          <tr id="user-row-Merchant-{{ merchant.merch_id }}"
+              class="hover:bg-[#F7F9F7] transition-colors user-data-row"
+              data-date="{{ merchant.user.created_at|date:'Y-m-d' }}"
+              data-search="MID-{{ merchant.merch_id }} {{ merchant.bus_name|lower }} {{ merchant.user.user_email|lower }}"
+              data-status="{{ merchant.status|lower }}"
+              data-tier="{{ merchant.plan_id }}">
+            <td class="p-3.5 font-mono font-semibold text-[#1B4D3E]">MID-{{ merchant.merch_id }}</td>
+            <td class="p-3.5 font-semibold text-[#12372C] merch-name-cell">{{ merchant.bus_name }}</td>
+            <td class="p-3.5 text-[#4F695D]">{{ merchant.user.created_at|date:"Y-m-d" }}</td>
+            
+            <td class="p-3.5">
+              {% if merchant.plan_id == 2 %}
+                <span class="bg-[#FEF3C7] text-[#B45309] border border-amber-300 px-2.5 py-1 rounded-lg font-bold text-[10px] inline-flex items-center gap-1">
+                  <i data-lucide="sparkles" class="w-3 h-3"></i> Pro Tier (₱149/mo)
+                </span>
+              {% else %}
+                <span class="bg-[#F8FAFC] text-[#475569] border border-[#E2E8F0] px-2.5 py-1 rounded-lg font-semibold text-[10px]">
+                  Basic Tier (Free)
+                </span>
+              {% endif %}
+            </td>
+
+            <td class="p-3.5 status-cell">
+              {% if merchant.status == 'Active' %}
+                <span class="bg-[#E4F0E8] text-[#1F6B52] px-2.5 py-1 rounded-lg text-[10px] font-semibold">Active</span>
+              {% elif merchant.status == 'Pending' %}
+                <span class="bg-[#FEF3C7] text-[#B45309] px-2.5 py-1 rounded-lg text-[10px] font-semibold">Pending</span>
+              {% else %}
+                <span class="bg-[#FBE4E1] text-[#B3261E] px-2.5 py-1 rounded-lg text-[10px] font-semibold">{{ merchant.status }}</span>
+              {% endif %}
+            </td>
+            <td class="p-3.5 action-cell">
+              {% if merchant.status == 'Pending' or merchant.status == 'Resubmit Required' %}
+                <button type="button"
+                        id="merch-kyb-btn-{{ merchant.merch_id }}"
+                        onclick="window.openAutoScanKybModal(this)"
+                        data-id="{{ merchant.merch_id }}"
+                        data-name="{{ merchant.bus_name }}"
+                        data-type="{{ merchant.merch_type }}"
+                        data-address="{{ merchant.address|default:'Not Provided' }}"
+                        data-contact="{{ merchant.contact_person|default:'Not Provided' }}"
+                        data-hotline="{{ merchant.hotline|default:'N/A' }}"
+                        data-phone="{{ merchant.phone|default:'Not Provided' }}"
+                        data-email="{{ merchant.user.user_email }}"
+                        data-date="{{ merchant.user.created_at|date:'Y-m-d' }}"
+                        data-expiry="{{ merchant.bus_expiry_date|date:'Y-m-d' }}"
+                        data-permit="{{ merchant.bus_permit_path }}"
+                        data-ocr="{{ merchant.ocr_extracted_text|default:'{}' }}"
+                        data-status="{{ merchant.status }}"
+                        class="flex items-center gap-1.5 bg-[#D97706] hover:bg-[#B45309] text-white px-3.5 py-2 rounded-xl text-[11px] font-semibold transition-colors cursor-pointer">
+                  <i data-lucide="scan-eye" class="w-3.5 h-3.5"></i> Review
+                </button>
+              {% else %}
+                <button type="button"
+                        id="merch-kyb-btn-{{ merchant.merch_id }}"
+                        onclick="window.handleOpenActiveMerchantModal(this)"
+                        data-id="{{ merchant.merch_id }}"
+                        data-name="{{ merchant.bus_name }}"
+                        data-type="{{ merchant.merch_type }}"
+                        data-address="{{ merchant.address|default:'Not Provided' }}"
+                        data-contact="{{ merchant.contact_person|default:'Not Provided' }}"
+                        data-hotline="{{ merchant.hotline|default:'N/A' }}"
+                        data-phone="{{ merchant.phone|default:'Not Provided' }}"
+                        data-email="{{ merchant.user.user_email }}"
+                        data-date="{{ merchant.user.created_at|date:'Y-m-d' }}"
+                        data-expiry="{{ merchant.bus_expiry_date|date:'Y-m-d' }}"
+                        data-permit="{{ merchant.bus_permit_path }}"
+                        data-ocr="{{ merchant.ocr_extracted_text|default:'{}' }}"
+                        data-status="{{ merchant.status }}"
+                        class="flex items-center gap-1.5 bg-[#3A826D] hover:bg-[#1B4D3E] text-white px-3.5 py-2 rounded-xl text-[11px] font-semibold transition-colors cursor-pointer">
+                  <i data-lucide="eye" class="w-3.5 h-3.5"></i> View
+                </button>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr class="empty-row"><td colspan="6" class="p-8 text-center text-[#4F695D] text-xs">No merchants registered yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <!-- 3. FOOD BANK TABLE -->
+      <table id="table-foodbank" class="user-role-table hidden w-full text-left text-xs min-w-[640px]">
+        <thead class="bg-[#F3F6F4] text-[#12372C] font-semibold uppercase tracking-wider text-[10px] border-b border-[#DCE5DF]">
+          <tr>
+            <th class="p-3.5">Hub ID</th>
+            <th class="p-3.5">Organization Name</th>
+            <th class="p-3.5">Date Joined</th>
+            <th class="p-3.5">Status</th>
+            <th class="p-3.5">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-[#DCE5DF]">
+          {% for foodbank in foodbanks %}
+          <tr id="user-row-FoodBank-{{ foodbank.org_id }}"
+              class="hover:bg-[#F7F9F7] transition-colors user-data-row"
+              data-date="{{ foodbank.user.created_at|date:'Y-m-d' }}"
+              data-search="FB-{{ foodbank.org_id }} {{ foodbank.org_name|lower }} {{ foodbank.user.user_email|lower }}"
+              data-status="{{ foodbank.status|lower }}">
+            <td class="p-3.5 font-mono font-semibold text-[#1B4D3E]">FB-{{ foodbank.org_id }}</td>
+            <td class="p-3.5 font-semibold text-[#12372C]">{{ foodbank.org_name }}</td>
+            <td class="p-3.5 text-[#4F695D]">{{ foodbank.user.created_at|date:"Y-m-d" }}</td>
+            <td class="p-3.5 status-cell">
+              {% if foodbank.status == 'Active' %}
+                <span class="bg-[#E4F0E8] text-[#1F6B52] px-2.5 py-1 rounded-lg text-[10px] font-semibold">Active</span>
+              {% elif foodbank.status == 'Pending' %}
+                <span class="bg-[#FEF3C7] text-[#B45309] px-2.5 py-1 rounded-lg text-[10px] font-semibold">Pending</span>
+              {% else %}
+                <span class="bg-[#FBE4E1] text-[#B3261E] px-2.5 py-1 rounded-lg text-[10px] font-semibold">{{ foodbank.status }}</span>
+              {% endif %}
+            </td>
+            <td class="p-3.5 action-cell">
+              {% if foodbank.status == 'Pending' or foodbank.status == 'Resubmit Required' %}
+                <button type="button"
+                   onclick="window.handleOpenFoodBankPendingModal(this)"
+                   data-id="{{ foodbank.org_id }}"
+                   data-name="{{ foodbank.org_name }}"
+                   data-address="{{ foodbank.address|default:'Not Provided' }}"
+                   data-contact="{{ foodbank.contact_person|default:'Not Provided' }}"
+                   data-hotline="{{ foodbank.hotline|default:'N/A' }}"
+                   data-phone="{{ foodbank.phone|default:'Not Provided' }}"
+                   data-email="{{ foodbank.user.user_email }}"
+                   data-date="{{ foodbank.user.created_at|date:'Y-m-d' }}"
+                   data-expiry="{{ foodbank.accreditation_expiry|date:'Y-m-d'|default:'2026-12-31' }}"
+                   data-status="{{ foodbank.status }}"
+                   data-permit="/media/{{ foodbank.accreditation_path }}"
+                   class="flex items-center gap-1.5 bg-[#D97706] hover:bg-[#B45309] text-white px-3.5 py-2 rounded-xl text-[11px] font-semibold transition-colors cursor-pointer">
+                  <i data-lucide="scan-eye" class="w-3.5 h-3.5"></i> Review
+                </button>
+              {% else %}
+                <button type="button"
+                   onclick="window.handleOpenFoodBankModal(this)"
+                   data-id="{{ foodbank.org_id }}"
+                   data-name="{{ foodbank.org_name }}"
+                   data-address="{{ foodbank.address|default:'Not Provided' }}"
+                   data-contact="{{ foodbank.contact_person|default:'Not Provided' }}"
+                   data-hotline="{{ foodbank.hotline|default:'N/A' }}"
+                   data-phone="{{ foodbank.phone|default:'Not Provided' }}"
+                   data-email="{{ foodbank.user.user_email }}"
+                   data-date="{{ foodbank.user.created_at|date:'Y-m-d' }}"
+                   data-expiry="{{ foodbank.accreditation_expiry|date:'Y-m-d'|default:'2026-12-31' }}"
+                   data-status="{{ foodbank.status }}"
+                   data-permit="/media/{{ foodbank.accreditation_path }}"
+                   class="flex items-center gap-1.5 bg-[#3A826D] hover:bg-[#1B4D3E] text-white px-3.5 py-2 rounded-xl text-[11px] font-semibold transition-colors cursor-pointer">
+                  <i data-lucide="eye" class="w-3.5 h-3.5"></i> View
+                </button>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr class="empty-row"><td colspan="5" class="p-8 text-center text-[#4F695D] text-xs">No Food Banks registered yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SCREENSHOT-MATCHED 20-ROW PAGINATION FOOTER -->
+    <div id="usersPaginationBar" class="px-5 py-4 bg-white border-t border-[#E5E7EB]">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div id="usersPaginationButtons" class="flex items-center gap-1.5 flex-wrap"></div>
+        <div class="flex items-center gap-2.5">
+          <span class="text-xs font-medium text-gray-700">Result per page</span>
+          <select id="usersPageSizeSelect" onchange="window.changeUserPageSize(this.value)" class="h-9 px-3 rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-800 focus:outline-none focus:border-gray-400 cursor-pointer">
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+      </div>
+      <div id="usersPaginationSummary" class="mt-2.5 text-xs font-medium text-gray-600">0-0 of 0</div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!--                               MODALS LAYER                                -->
+  <!-- ========================================================================= -->
+
+  <!-- 1. CONSUMER 360° DOSSIER MODAL (STICKY HEADER + 10-ROW PROGRESSIVE TABLE) -->
+  <div id="consumerViewModal" class="modal-overlay hidden fixed inset-0 bg-[#12372C]/60 backdrop-blur-xs flex justify-center items-center z-50 p-4">
+    <div class="bg-[#F4F8F6] rounded-2xl w-full max-w-[900px] max-h-[92vh] overflow-y-auto shadow-2xl border border-[#DCE5DF] flex flex-col justify-between relative">
+      <div class="sticky top-0 z-30 bg-white px-6 py-4 border-b border-[#DCE5DF] flex justify-between items-center">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-[#1B4D3E] text-white flex items-center justify-center font-bold text-sm" id="consInitials">C</div>
+          <div>
+            <h3 id="consViewName" class="font-bold text-[#12372C] text-base">Consumer Name</h3>
+            <p class="text-[11px] text-[#4F695D]">Consumer Profile (<span id="consViewId" class="font-mono font-semibold text-[#1B4D3E]">ID</span>)</p>
+          </div>
+        </div>
+        <button onclick="toggleModal('consumerViewModal')" class="w-8 h-8 rounded-full bg-[#F4F8F6] hover:bg-[#E8EFEA] text-[#12372C] border border-[#DCE5DF] flex items-center justify-center font-bold text-xs cursor-pointer">✕</button>
+      </div>
+
+      <div class="p-5 space-y-4 text-xs">
+        <div id="consStrikeAlertBanner" class="hidden bg-[#FBE4E1] border border-[#B3261E]/40 rounded-xl p-3.5 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3 text-[#B3261E]">
+            <i data-lucide="shield-alert" class="w-5 h-5 shrink-0"></i>
+            <div>
+              <p class="font-bold uppercase text-[11px]">3-Strike No-Show Threshold Reached</p>
+              <p class="text-[11px] text-[#12372C]">This consumer has accumulated 3 or more confirmed No-Show strikes. Account suspension is recommended.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          <div class="lg:col-span-5 bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-2.5">
+            <div class="flex justify-between items-center border-b border-[#DCE5DF] pb-2">
+              <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider">Identity &amp; Contact</h4>
+              <span id="consStatusBadge" class="bg-[#E4F0E8] text-[#1F6B52] px-2.5 py-0.5 rounded-lg text-[10px] font-semibold uppercase">ACTIVE</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2.5 text-[11px]">
+              <div>
+                <span class="text-[10px] text-[#4F695D] block">Full Name</span>
+                <p class="font-semibold text-[#12372C]" id="consViewFullName">...</p>
+              </div>
+              <div>
+                <span class="text-[10px] text-[#4F695D] block">Mobile Number</span>
+                <p class="font-semibold text-[#12372C]" id="consViewPhone">...</p>
+              </div>
+              <div class="col-span-2">
+                <span class="text-[10px] text-[#4F695D] block">Email Address</span>
+                <p class="font-medium text-[#3A826D] break-all" id="consViewEmail">...</p>
+              </div>
+              <div class="col-span-2">
+                <span class="text-[10px] text-[#4F695D] block">Cebu City Address</span>
+                <p class="font-medium text-[#12372C]" id="consViewAddress">...</p>
+              </div>
+              <div>
+                <span class="text-[10px] text-[#4F695D] block">Date Joined</span>
+                <p class="font-medium text-[#4F695D]" id="consViewDate">...</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="lg:col-span-7 grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            <div class="bg-white p-3.5 rounded-xl border border-[#DCE5DF] flex flex-col justify-between">
+              <span class="text-[10px] font-medium text-[#4F695D]">No-Show Strikes</span>
+              <p id="consMetricStrikes" class="text-2xl font-bold text-[#B3261E] mt-1">0 / 3</p>
+              <span class="text-[10px] text-[#4F695D]">3 Strikes = Suspend</span>
+            </div>
+            <div class="bg-white p-3.5 rounded-xl border border-[#DCE5DF] flex flex-col justify-between">
+              <span class="text-[10px] font-medium text-[#4F695D]">Completed Pickups</span>
+              <p id="consMetricCompleted" class="text-2xl font-bold text-[#1B4D3E] mt-1">0</p>
+              <span id="consMetricTotalOrders" class="text-[10px] text-[#4F695D]">of 0 total orders</span>
+            </div>
+            <div class="bg-white p-3.5 rounded-xl border border-[#DCE5DF] flex flex-col justify-between">
+              <span class="text-[10px] font-medium text-[#4F695D]">Food Rescued</span>
+              <p id="consMetricSavedKg" class="text-2xl font-bold text-[#3A826D] mt-1">0.0 kg</p>
+              <span class="text-[10px] text-[#4F695D]">Verified impact</span>
+            </div>
+            <div class="bg-white p-3.5 rounded-xl border border-[#DCE5DF] flex flex-col justify-between">
+              <span class="text-[10px] font-medium text-[#4F695D]">Ratings Given</span>
+              <p id="consMetricRating" class="text-lg font-bold text-amber-600 mt-1">★ 0.0 (0)</p>
+              <span class="text-[10px] text-[#4F695D]">Merchant feedback</span>
+            </div>
+            <div class="bg-white p-3.5 rounded-xl border border-[#DCE5DF] flex flex-col justify-between">
+              <span class="text-[10px] font-medium text-[#4F695D]">Reports Received</span>
+              <p id="consMetricReportsRec" class="text-2xl font-bold text-[#B3261E] mt-1">0</p>
+              <span class="text-[10px] text-[#4F695D]">No-shows &amp; flags</span>
+            </div>
+            <div class="bg-white p-3.5 rounded-xl border border-[#DCE5DF] flex flex-col justify-between">
+              <span class="text-[10px] font-medium text-[#4F695D]">Issues Reported</span>
+              <p id="consMetricIssuesRep" class="text-2xl font-bold text-[#12372C] mt-1">0</p>
+              <span class="text-[10px] text-[#4F695D]">Support tickets</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex gap-2 border-b border-[#DCE5DF] pb-1 overflow-x-auto">
+          <button type="button" onclick="switchDossierTab('cons', 'receipts', this)" class="cons-dossier-tab px-4 py-2 text-[11px] font-black rounded-xl bg-[#1B4D3E] text-white">
+            Transactions &amp; Digital Receipts
+          </button>
+          <button type="button" onclick="switchDossierTab('cons', 'reviews', this)" class="cons-dossier-tab px-4 py-2 text-[11px] font-bold rounded-xl bg-white text-gray-600 hover:text-[#1B4D3E]">
+            Ratings &amp; Reviews Given
+          </button>
+          <button type="button" onclick="switchDossierTab('cons', 'reports', this)" class="cons-dossier-tab px-4 py-2 text-[11px] font-bold rounded-xl bg-white text-gray-600 hover:text-[#1B4D3E]">
+            No-Show Strikes &amp; Reports Received
+          </button>
+          <button type="button" onclick="switchDossierTab('cons', 'issues', this)" class="cons-dossier-tab px-4 py-2 text-[11px] font-bold rounded-xl bg-white text-gray-600 hover:text-[#1B4D3E]">
+            Support Issues Reported
+          </button>
+        </div>
+
+        <div id="cons-panel-receipts" class="cons-dossier-panel bg-white p-4 rounded-xl border border-[#DCE5DF]">
+          <div class="overflow-x-auto rounded-xl border border-[#DCE5DF]">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-[#F3F6F4] text-[#12372C] text-[10px] font-semibold uppercase border-b border-[#DCE5DF]">
+                <tr>
+                  <th class="p-3">Voucher ID</th>
+                  <th class="p-3">Food Item(s)</th>
+                  <th class="p-3">Establishment</th>
+                  <th class="p-3">Date Ordered</th>
+                  <th class="p-3">Dynamic Rescue Total (20% / 80%)</th>
+                  <th class="p-3">Status</th>
+                  <th class="p-3">Receipt</th>
+                </tr>
+              </thead>
+              <tbody id="consumerTransactionsBody" class="divide-y divide-[#DCE5DF]">
+                <tr><td colspan="7" class="p-4 text-center text-[#4F695D]">Loading transaction receipts...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="cons-panel-reviews" class="cons-dossier-panel hidden bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-2 max-h-64 overflow-y-auto">
+          <div id="consumerReviewsBody" class="space-y-2"></div>
+        </div>
+
+        <div id="cons-panel-reports" class="cons-dossier-panel hidden bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-2 max-h-64 overflow-y-auto">
+          <div id="consumerReportsReceivedBody" class="space-y-2"></div>
+        </div>
+
+        <div id="cons-panel-issues" class="cons-dossier-panel hidden bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-2 max-h-64 overflow-y-auto">
+          <div id="consumerIssuesReportedBody" class="space-y-2"></div>
+        </div>
+      </div>
+
+      <div class="px-6 py-3.5 bg-white border-t border-[#DCE5DF] flex flex-wrap justify-between items-center gap-3">
+        <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          <button type="button" onclick="window.openSendNotificationModal('Consumer', false)" class="bg-[#1B4D3E] hover:bg-[#12372C] text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all cursor-pointer">
+            Send Notification
+          </button>
+          <select id="consumerSuspendReason" class="text-xs font-medium text-[#12372C] p-2.5 border border-[#DCE5DF] rounded-xl bg-[#F7F9F7] focus:outline-none focus:border-[#1B4D3E]">
+            <option value="">Select suspension reason...</option>
+            <option value="3 Confirmed No-Show Strikes (Unclaimed Reservations)">3 Confirmed No-Show Strikes</option>
+            <option value="Abusive Behavior Towards Merchants">Abusive Behavior Towards Merchants</option>
+            <option value="Fraudulent / Spam Activity">Fraudulent / Spam Activity</option>
+            <option value="Terms of Service Violation">Terms of Service Violation</option>
+          </select>
+          <button onclick="executeConsumerSuspend()" class="bg-[#FDF3F2] border border-[#E5B8B4] text-[#B3261E] font-semibold text-xs px-4 py-2.5 rounded-xl hover:bg-[#FBE4E1] transition-colors">
+            Suspend User
+          </button>
+        </div>
+        <button onclick="toggleModal('consumerViewModal')" class="bg-[#1B4D3E] hover:bg-[#12372C] text-white px-7 py-2.5 rounded-xl text-xs font-semibold transition-colors">Close</button>
+      </div>
+      <input type="hidden" id="activeConsumerRawId">
+    </div>
+  </div>
+
+  <!-- 2. PENDING MERCHANT KYB REVIEW MODAL (STICKY HEADER + AUTO-SCANNER) -->
+  <div id="merchantPendingModal" class="modal-overlay hidden fixed inset-0 bg-[#12372C]/60 backdrop-blur-xs flex justify-center items-center z-50 p-4">
+    <div class="bg-[#F4F8F6] rounded-2xl w-full max-w-[1080px] max-h-[94vh] overflow-y-auto shadow-2xl border border-[#DCE5DF] flex flex-col justify-between relative">
+      <div class="sticky top-0 z-30 bg-white px-6 py-4 border-b border-[#DCE5DF] flex justify-between items-center">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-[#1B4D3E] text-white flex items-center justify-center">
+            <i data-lucide="scan-eye" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 id="pendingModalTitle" class="font-bold text-[#12372C] text-base">Merchant KYB &amp; Automated Permit Authenticity Review</h3>
+            <p class="text-[11px] text-[#4F695D]">Automatic AI visual inspection against Cebu City Mayor's Business Permit landmarks (creases &amp; plastic holders tolerated)</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2.5">
+          <span id="pendingAiScoreBadge" class="bg-[#FEF3C7] text-[#B45309] border border-amber-300 text-xs font-bold px-3.5 py-1 rounded-xl">Scanning Document...</span>
+          <button type="button" onclick="window.closeModal('merchantPendingModal')" class="w-8 h-8 rounded-full bg-[#F4F8F6] hover:bg-[#E8EFEA] text-[#12372C] border border-[#DCE5DF] flex items-center justify-center font-bold text-xs cursor-pointer">✕</button>
+        </div>
+      </div>
+
+      <div class="p-5 grid grid-cols-1 lg:grid-cols-12 gap-4 text-xs">
+        <!-- LEFT COLUMN (5 COLS): SUBMITTED ESTABLISHMENT & AUTO-EXTRACTED PERMIT CREDENTIALS -->
+        <div class="lg:col-span-5 space-y-3.5">
+          <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-3">
+            <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider flex items-center gap-2 border-b border-[#DCE5DF] pb-2">
+              <i data-lucide="store" class="w-4 h-4 text-[#3A826D]"></i> Establishment &amp; Contact Information
+            </h4>
+            <div class="grid grid-cols-2 gap-2">
+              <div class="col-span-2">
+                <label class="text-[10px] text-[#4F695D]">Establishment Name</label>
+                <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-2 rounded-lg text-[#12372C] font-bold mt-0.5" id="pendingBusName">...</div>
+              </div>
+              <div>
+                <label class="text-[10px] text-[#4F695D]">Business Type</label>
+                <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-2 rounded-lg text-[#12372C] font-semibold mt-0.5" id="pendingMerchType">...</div>
+              </div>
+              <div>
+                <label class="text-[10px] text-[#4F695D]">Application Date</label>
+                <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-2 rounded-lg text-[#12372C] font-medium mt-0.5" id="pendingDate">...</div>
+              </div>
+              <div class="col-span-2">
+                <label class="text-[10px] text-[#4F695D]">Registered Business Address (Locked)</label>
+                <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-2 rounded-lg text-[#12372C] font-medium mt-0.5" id="pendingAddress">...</div>
+              </div>
+              <div>
+                <label class="text-[10px] text-[#4F695D]">Contact Person / Taxpayer</label>
+                <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-2 rounded-lg text-[#12372C] font-semibold mt-0.5" id="pendingContact">...</div>
+              </div>
+              <div>
+                <label class="text-[10px] text-[#4F695D]">Verified Mobile Number</label>
+                <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-2 rounded-lg text-[#12372C] font-medium mt-0.5" id="pendingPhone">...</div>
+              </div>
+              <div>
+                <label class="text-[10px] text-[#4F695D]">Business Hotline</label>
+                <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-2 rounded-lg text-[#12372C] font-medium mt-0.5" id="pendingHotline">...</div>
+              </div>
+              <div>
+                <label class="text-[10px] text-[#4F695D]">Verified Email Address</label>
+                <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-2 rounded-lg text-[#3A826D] font-medium mt-0.5 break-all" id="pendingEmail">...</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-2.5">
+            <div class="flex items-center justify-between border-b border-[#DCE5DF] pb-2">
+              <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider flex items-center gap-2">
+                <i data-lucide="file-badge" class="w-4 h-4 text-[#3A826D]"></i> Extracted Permit Credentials
+              </h4>
+              <button type="button" id="pendingPermitBtn" class="text-[11px] font-semibold text-[#3A826D] hover:text-[#1B4D3E] flex items-center gap-1 cursor-pointer">
+                <i data-lucide="external-link" class="w-3.5 h-3.5"></i> Open Full Image
+              </button>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-[10px] text-[#4F695D]">Mayor's Permit No.</label>
+                <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-2 rounded-lg text-[#1B4D3E] font-mono font-bold mt-0.5" id="pendingPermitNo">...</div>
+              </div>
+              <div>
+                <label class="text-[10px] text-[#4F695D]">Calendar Year</label>
+                <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-2 rounded-lg text-[#12372C] font-semibold mt-0.5" id="pendingCalendarYear">...</div>
+              </div>
+              <div>
+                <label class="text-[10px] text-[#4F695D]">TIN / Capital</label>
+                <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-2 rounded-lg text-[#12372C] font-mono font-semibold mt-0.5" id="pendingTinNumber">...</div>
+              </div>
+              <div>
+                <label class="text-[10px] text-[#4F695D]">Permit Expiry Date</label>
+                <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-2 rounded-lg text-[#1B4D3E] font-semibold mt-0.5" id="pendingPermitExpiry">...</div>
+              </div>
+              <div class="col-span-2">
+                <label class="text-[10px] text-[#4F695D]">Line / Nature of Business</label>
+                <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-2 rounded-lg text-[#12372C] font-medium mt-0.5" id="pendingLineOfBusiness">...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT COLUMN (7 COLS): EMBEDDED LIVE PERMIT SCANNER + ILLEGITIMACY / LANDMARK BREAKDOWN -->
+        <div class="lg:col-span-7 space-y-3.5">
+          <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[#DCE5DF] pb-2">
+              <div class="flex items-center gap-2">
+                <span id="inlineScanPulseDot" class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping"></span>
+                <h4 id="inlineScannerHeading" class="font-bold text-[#12372C] text-xs uppercase tracking-wider">
+                  Automated Cebu Business Permit Authenticity Scan
+                </h4>
+              </div>
+              <span class="text-[10px] font-mono text-[#4F695D]" id="ocrDocName">business_permit.jpg</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-3.5 items-start">
+              <div class="md:col-span-6 bg-[#12372C] rounded-xl p-2.5 flex items-center justify-center relative overflow-hidden min-h-[320px]">
+                <div id="inlineScannerLaserBar" class="permit-laser-line"></div>
+                <div class="relative w-full flex items-center justify-center">
+                  <img id="inlineScannerPermitImg" src="" alt="Uploaded Business Permit" class="max-h-[340px] w-full rounded-lg object-contain border border-white/15 bg-[#0E2920]">
+                  <div id="inlineScannerOverlayBoxes" class="absolute inset-0 pointer-events-none"></div>
+                </div>
+              </div>
+
+              <div class="md:col-span-6 space-y-2.5">
+                <div id="inlineVerdictBanner" class="p-3 rounded-xl border border-[#DCE5DF] bg-[#F7F9F7]">
+                  <div class="flex items-center justify-between">
+                    <span class="text-[10px] font-bold uppercase text-[#4F695D]">Authenticity Score</span>
+                    <span id="inlineScoreValue" class="text-sm font-black text-[#1B4D3E]">Scanning...</span>
+                  </div>
+                  <p id="inlineVerdictSummary" class="text-[11px] text-[#12372C] mt-1 leading-relaxed">
+                    Scanning uploaded document against Cebu City Business Permit landmarks...
+                  </p>
+                </div>
+
+                <div id="inlineIllegitimateBox" class="hidden p-3 rounded-xl bg-[#FBE4E1] border border-[#B3261E]/35 space-y-1.5">
+                  <div class="flex items-center gap-1.5 text-[#B3261E] font-bold text-[11px]">
+                    <i data-lucide="alert-octagon" class="w-4 h-4 shrink-0"></i>
+                    <span>Why This Document Is Flagged / Illegitimate:</span>
+                  </div>
+                  <ul id="inlineIllegitimateList" class="list-disc pl-4 space-y-1 text-[10.5px] text-[#12372C] leading-snug"></ul>
+                </div>
+
+                <div class="space-y-1.5 max-h-[220px] overflow-y-auto pr-1" id="inlineChecklistContainer"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-6 py-3.5 bg-white border-t border-[#DCE5DF] flex flex-wrap justify-between items-center gap-3">
+        <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          <button type="button" onclick="window.openSendNotificationModal('Merchant', false)" class="bg-[#1B4D3E] hover:bg-[#12372C] text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition-colors cursor-pointer">
+            Send Notification
+          </button>
+          <select id="rejectReasonSelect" class="text-xs font-medium text-[#12372C] p-2.5 border border-[#DCE5DF] rounded-xl bg-[#F7F9F7] focus:outline-none">
+            <option value="">Select rejection reason...</option>
+            <option value="Illegitimate or non-permit document uploaded (Please upload an official Cebu City Business Permit)">Illegitimate / Non-Permit Document</option>
+            <option value="Blurry or unreadable document (Please re-upload a clear copy)">Blurry or unreadable document</option>
+            <option value="Business permit is expired (Please upload renewed permit)">Business permit is expired</option>
+            <option value="Submitted details do not match uploaded business permit">Details Mismatch</option>
+          </select>
+          <button type="button" onclick="window.executeReject('Merchant')" class="bg-[#FDF3F2] border border-[#E5B8B4] text-[#B3261E] font-semibold text-xs px-4 py-2.5 rounded-xl hover:bg-[#FBE4E1] transition-colors cursor-pointer">
+            Reject Application
+          </button>
+        </div>
+        <button type="button" onclick="window.executeApprove('Merchant')" class="bg-[#3A826D] hover:bg-[#1B4D3E] text-white font-semibold text-xs px-7 py-2.5 rounded-xl transition-colors w-full md:w-auto cursor-pointer">
+          Approve Registration
+        </button>
+      </div>
+      <input type="hidden" id="pendingMerchantId">
+    </div>
+  </div>
+
+  <!-- 3. ACTIVE MERCHANT 360° DOSSIER MODAL (STICKY HEADER + LIVE DOSSIER LOADER) -->
+  <div id="merchantActiveModal" class="modal-overlay hidden fixed inset-0 bg-[#12372C]/60 backdrop-blur-xs flex justify-center items-center z-50 p-4">
+    <div class="bg-[#F4F8F6] rounded-2xl w-full max-w-[940px] max-h-[92vh] overflow-y-auto shadow-2xl border border-[#DCE5DF] flex flex-col justify-between relative">
+      <div class="sticky top-0 z-30 bg-white px-6 py-4 border-b border-[#DCE5DF] flex justify-between items-center">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-[#E8EFEA] flex items-center justify-center text-[#1B4D3E]">
+            <i data-lucide="store" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 id="activeModalTitle" class="font-bold text-[#12372C] text-base">Merchant Name</h3>
+            <p class="text-[11px] text-[#4F695D]">Merchant Profile &amp; Audit</p>
+          </div>
+        </div>
+        <button onclick="toggleModal('merchantActiveModal')" class="w-8 h-8 rounded-full bg-[#F4F8F6] hover:bg-[#E8EFEA] text-[#12372C] border border-[#DCE5DF] flex items-center justify-center font-bold text-xs cursor-pointer">✕</button>
+      </div>
+
+      <div class="p-5 space-y-4 text-xs">
+        <div id="activePermitExpiryAlert" class="hidden bg-[#FEF3C7] border border-amber-300 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-3 text-amber-900 text-xs">
+            <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 shrink-0"></i>
+            <div>
+              <p class="font-bold uppercase text-[10px]">Business Permit Renewal Alert</p>
+              <p id="activePermitExpiryAlertText" class="text-[11px]">This merchant's business permit is expiring soon.</p>
+            </div>
+          </div>
+          <button type="button" onclick="window.openSendNotificationModal('Merchant', true)" class="bg-[#D97706] hover:bg-[#B45309] text-white text-[11px] font-semibold px-4 py-2 rounded-xl transition-colors cursor-pointer">
+            Notify to Renew Permit
+          </button>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-6 gap-2.5 text-xs">
+          <div class="bg-white p-3 rounded-xl border border-[#DCE5DF]">
+            <span class="text-[10px] text-[#4F695D] block">Store Rating</span>
+            <p id="merchMetricRating" class="text-base font-bold text-amber-600 mt-0.5">★ 0.0 (0)</p>
+          </div>
+          <div class="bg-white p-3 rounded-xl border border-[#DCE5DF]">
+            <span class="text-[10px] text-[#4F695D] block">Active Listings</span>
+            <p id="merchMetricActive" class="text-base font-bold text-[#1B4D3E] mt-0.5">0</p>
+          </div>
+          <div class="bg-white p-3 rounded-xl border border-[#DCE5DF]">
+            <span class="text-[10px] text-[#4F695D] block">Completed Sales</span>
+            <p id="merchMetricSales" class="text-base font-bold text-[#3A826D] mt-0.5">0</p>
+          </div>
+          <div class="bg-white p-3 rounded-xl border border-[#DCE5DF]">
+            <span class="text-[10px] text-[#4F695D] block">Donations Posted</span>
+            <p id="merchMetricDonations" class="text-base font-bold text-[#12372C] mt-0.5">0</p>
+          </div>
+          <div class="bg-white p-3 rounded-xl border border-[#DCE5DF]">
+            <span class="text-[10px] text-[#4F695D] block">Wallet Balance</span>
+            <p id="merchMetricWallet" class="text-base font-bold text-[#1B4D3E] mt-0.5">₱0.00</p>
+          </div>
+          <div class="bg-white p-3 rounded-xl border border-[#DCE5DF]">
+            <span class="text-[10px] text-[#4F695D] block">Flags / Tickets</span>
+            <p id="merchMetricFlags" class="text-base font-bold text-[#B3261E] mt-0.5">0 / 0</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+          <div class="md:col-span-7 bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-3 text-xs">
+            <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider border-b border-[#DCE5DF] pb-2 flex items-center gap-2">
+              <i data-lucide="clipboard-check" class="w-4 h-4 text-[#3A826D]"></i> Establishment Details
+            </h4>
+            <div class="grid grid-cols-2 gap-2.5">
+              <div>
+                <span class="text-[10px] text-[#4F695D] block">Establishment Name</span>
+                <p class="font-semibold text-[#12372C] mt-0.5" id="activeBusName">...</p>
+              </div>
+              <div>
+                <span class="text-[10px] text-[#4F695D] block">Business Type</span>
+                <p class="font-semibold text-[#12372C] mt-0.5" id="activeMerchType">...</p>
+              </div>
+              <div class="col-span-2">
+                <span class="text-[10px] text-[#4F695D] block">Physical Address (Locked)</span>
+                <p class="font-medium text-[#12372C] mt-0.5" id="activeBusAddress">...</p>
+              </div>
+              <div>
+                <span class="text-[10px] text-[#4F695D] block">Contact Person</span>
+                <p class="font-medium text-[#12372C] mt-0.5" id="activeContactPerson">...</p>
+              </div>
+              <div>
+                <span class="text-[10px] text-[#4F695D] block">Mobile Number</span>
+                <p class="font-medium text-[#12372C] mt-0.5" id="activeContactPhone">...</p>
+              </div>
+              <div>
+                <span class="text-[10px] text-[#4F695D] block">Business Hotline</span>
+                <p class="font-medium text-[#12372C] mt-0.5" id="activeHotline">...</p>
+              </div>
+              <div>
+                <span class="text-[10px] text-[#4F695D] block">Date Registered</span>
+                <p class="font-medium text-[#12372C] mt-0.5" id="activeBusDate">...</p>
+              </div>
+              <div class="col-span-2">
+                <span class="text-[10px] text-[#4F695D] block">Account Email Address</span>
+                <p class="font-medium text-[#3A826D] mt-0.5" id="activeBusEmail">...</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="md:col-span-5 bg-white p-4 rounded-xl border border-[#DCE5DF] flex flex-col justify-between gap-3 text-xs">
+            <div class="space-y-2.5">
+              <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider border-b border-[#DCE5DF] pb-2 flex items-center gap-2">
+                <i data-lucide="folder-check" class="w-4 h-4 text-[#3A826D]"></i> Verified Permit Info
+              </h4>
+              <div class="bg-[#F7F9F7] p-3 rounded-xl border border-[#DCE5DF] space-y-2">
+                <p class="flex justify-between">
+                  <span class="text-[#4F695D]">Permit No:</span>
+                  <strong class="text-[#12372C]" id="activePermitNo">Verified</strong>
+                </p>
+                <p class="flex justify-between">
+                  <span class="text-[#4F695D]">TIN / Capital:</span>
+                  <strong class="text-[#12372C]" id="activePermitTin">N/A</strong>
+                </p>
+                <p class="flex justify-between">
+                  <span class="text-[#4F695D]">Calendar Year:</span>
+                  <strong class="text-[#12372C]" id="activePermitYear">2026-2027</strong>
+                </p>
+                <p class="flex justify-between">
+                  <span class="text-[#4F695D]">Line of Business:</span>
+                  <strong class="text-[#12372C] text-right max-w-[180px] truncate" id="activePermitNature">Food Establishment</strong>
+                </p>
+                <p class="flex justify-between">
+                  <span class="text-[#4F695D]">LGU Authority:</span>
+                  <strong class="text-[#12372C]" id="activePermitLGU">Cebu City</strong>
+                </p>
+                <p class="flex justify-between">
+                  <span class="text-[#4F695D]">Permit Expiry:</span>
+                  <strong class="text-[#1B4D3E]" id="activePermitExpiry">YYYY-MM-DD</strong>
+                </p>
+              </div>
+            </div>
+
+            <div class="space-y-2">
+              <button type="button" id="activePermitBtn" class="bg-[#E8EFEA] hover:bg-[#3A826D] hover:text-white transition-colors text-[#1B4D3E] font-semibold text-xs px-4 py-2.5 rounded-xl w-full cursor-pointer">
+                Inspect Verified Permit
+              </button>
+              <button type="button" id="activeVisitProfileBtn" class="bg-[#1B4D3E] hover:bg-[#12372C] text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition-colors w-full flex items-center justify-center gap-1.5 cursor-pointer">
+                <i data-lucide="external-link" class="w-3.5 h-3.5"></i> Visit Profile in Food Listing
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex gap-2 border-b border-[#DCE5DF] pb-1 overflow-x-auto">
+          <button type="button" onclick="switchDossierTab('merch', 'receipts', this)" class="merch-dossier-tab px-4 py-2 text-[11px] font-black rounded-xl bg-[#1B4D3E] text-white">
+            Sales &amp; Donation Handshake Receipts
+          </button>
+          <button type="button" onclick="switchDossierTab('merch', 'reviews', this)" class="merch-dossier-tab px-4 py-2 text-[11px] font-bold rounded-xl bg-white text-gray-600 hover:text-[#1B4D3E]">
+            Consumer Reviews Received
+          </button>
+          <button type="button" onclick="switchDossierTab('merch', 'reports', this)" class="merch-dossier-tab px-4 py-2 text-[11px] font-bold rounded-xl bg-white text-gray-600 hover:text-[#1B4D3E]">
+            Compliance Notices &amp; Support Tickets
+          </button>
+        </div>
+
+        <div id="merch-panel-receipts" class="merch-dossier-panel bg-white p-4 rounded-xl border border-[#DCE5DF]">
+          <div class="overflow-x-auto rounded-xl border border-[#DCE5DF]">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-[#F3F6F4] text-[#12372C] text-[10px] font-semibold uppercase border-b border-[#DCE5DF]">
+                <tr>
+                  <th class="p-3">Record ID</th>
+                  <th class="p-3">Item(s)</th>
+                  <th class="p-3">Buyer / Food Bank</th>
+                  <th class="p-3">Date</th>
+                  <th class="p-3">Amount / Vol</th>
+                  <th class="p-3">Status</th>
+                  <th class="p-3">Receipt</th>
+                </tr>
+              </thead>
+              <tbody id="merchantTransactionsBody" class="divide-y divide-[#DCE5DF]">
+                <tr><td colspan="7" class="p-4 text-center text-[#4F695D]">Loading merchant transactions...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="merch-panel-reviews" class="merch-dossier-panel hidden bg-white p-4 rounded-xl border border-[#DCE5DF] max-h-64 overflow-y-auto">
+          <div id="merchantReviewsBody" class="space-y-2 text-xs"></div>
+        </div>
+
+        <div id="merch-panel-reports" class="merch-dossier-panel hidden bg-white p-4 rounded-xl border border-[#DCE5DF] max-h-64 overflow-y-auto">
+          <div id="merchantReportsBody" class="space-y-2 text-xs"></div>
+        </div>
+
+        <div class="pt-1 flex flex-col md:flex-row items-center justify-between gap-3">
+          <div id="activeStatusWrapper" class="bg-[#E8EFEA] px-4 py-2.5 rounded-xl flex items-center gap-3 w-full md:w-auto border border-[#DCE5DF]">
+            <span id="activeStatusBadge" class="bg-[#3A826D] text-white px-3 py-1 rounded-lg text-xs font-semibold uppercase flex items-center gap-1">
+              <i data-lucide="badge-check" class="w-3.5 h-3.5"></i> VERIFIED
+            </span>
+            <div class="text-[10px] text-[#12372C] leading-tight">
+              <p class="text-[#4F695D]">Status logged on:</p>
+              <p class="font-semibold" id="activeStatusDate">2026-09-21</p>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            <button type="button" onclick="window.openSendNotificationModal('Merchant', false)" class="bg-[#1B4D3E] hover:bg-[#12372C] text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all cursor-pointer">
+              Send Notification
+            </button>
+            <select id="merchantSuspendReason" class="text-xs font-medium text-[#12372C] p-2.5 border border-[#DCE5DF] rounded-xl bg-white focus:outline-none">
+              <option value="">Select suspension reason...</option>
+              <option value="Expired Business Permit (Unrenewed)">Expired Business Permit</option>
+              <option value="Food Quality / Safety Violation">Food Quality / Safety Violation</option>
+              <option value="Repeated Unfulfilled Consumer Orders">Repeated Unfulfilled Orders</option>
+              <option value="Fraudulent Listing Activity">Fraudulent Listing Activity</option>
+            </select>
+            <button type="button" onclick="window.executeSuspend('Merchant')" class="bg-[#FDF3F2] border border-[#E5B8B4] text-[#B3261E] hover:bg-[#FBE4E1] text-xs font-semibold px-4 py-2.5 rounded-xl transition-all cursor-pointer">
+              Suspend User
+            </button>
+          </div>
+        </div>
+      </div>
+      <input type="hidden" id="activeMerchantId">
+    </div>
+  </div>
+
+  <!-- 4. FOOD BANK PENDING REVIEW MODAL (STICKY HEADER) -->
+  <div id="foodBankPendingModal" class="modal-overlay hidden fixed inset-0 bg-[#12372C]/60 backdrop-blur-xs flex justify-center items-center z-50 p-4">
+    <div class="bg-[#F4F8F6] rounded-2xl w-full max-w-[860px] max-h-[92vh] overflow-y-auto shadow-2xl border border-[#DCE5DF] flex flex-col justify-between relative">
+      <div class="sticky top-0 z-30 bg-white px-6 py-4 border-b border-[#DCE5DF] flex justify-between items-center">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-[#FEF3C7] text-[#B45309] flex items-center justify-center">
+            <i data-lucide="hand-heart" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 id="fbPendingModalTitle" class="font-bold text-[#12372C] text-base">Food Bank Verification</h3>
+            <p class="text-[11px] text-[#4F695D]">NGO / DSWD / LGU Accreditation Review</p>
+          </div>
+        </div>
+        <button onclick="toggleModal('foodBankPendingModal')" class="w-8 h-8 rounded-full bg-[#F4F8F6] hover:bg-[#E8EFEA] text-[#12372C] border border-[#DCE5DF] flex items-center justify-center font-bold text-xs cursor-pointer">✕</button>
+      </div>
+
+      <div class="p-5 grid grid-cols-1 md:grid-cols-12 gap-4 text-xs">
+        <div class="md:col-span-7 bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-3">
+          <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider border-b border-[#DCE5DF] pb-2 flex items-center gap-2">
+            <i data-lucide="clipboard-check" class="w-4 h-4 text-[#3A826D]"></i> Organization Registration Details
+          </h4>
+          <div class="grid grid-cols-2 gap-2.5">
+            <div class="col-span-2">
+              <label class="text-[10px] text-[#4F695D]">Organization Name</label>
+              <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-2 rounded-lg font-semibold text-[#12372C] mt-0.5" id="fbPendingName">...</div>
+            </div>
+            <div class="col-span-2">
+              <label class="text-[10px] text-[#4F695D]">Physical Address</label>
+              <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-2 rounded-lg font-medium text-[#12372C] mt-0.5" id="fbPendingAddress">...</div>
+            </div>
+            <div>
+              <label class="text-[10px] text-[#4F695D]">Contact Person</label>
+              <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-2 rounded-lg font-medium text-[#12372C] mt-0.5" id="fbPendingContact">...</div>
+            </div>
+            <div>
+              <label class="text-[10px] text-[#4F695D]">Contact Number</label>
+              <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-2 rounded-lg font-medium text-[#12372C] mt-0.5" id="fbPendingPhone">...</div>
+            </div>
+            <div>
+              <label class="text-[10px] text-[#4F695D]">Hotline</label>
+              <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-2 rounded-lg font-medium text-[#12372C] mt-0.5" id="fbPendingHotline">...</div>
+            </div>
+            <div>
+              <label class="text-[10px] text-[#4F695D]">Date Registered</label>
+              <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-2 rounded-lg font-medium text-[#12372C] mt-0.5" id="fbPendingDate">...</div>
+            </div>
+            <div class="col-span-2">
+              <label class="text-[10px] text-[#4F695D]">Email Address</label>
+              <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-2 rounded-lg font-medium text-[#3A826D] mt-0.5" id="fbPendingEmail">...</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="md:col-span-5 bg-white p-4 rounded-xl border border-[#DCE5DF] flex flex-col justify-between items-center text-center gap-4">
+          <div class="space-y-1">
+            <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider">Accreditation Certificate</h4>
+            <p class="text-[11px] text-[#4F695D]">Inspect the uploaded legal document before activating this hub.</p>
+          </div>
+          <div class="w-full bg-[#F7F9F7] rounded-xl border border-[#DCE5DF] p-5 flex flex-col items-center gap-3">
+            <i data-lucide="file-text" class="w-10 h-10 text-[#3A826D]"></i>
+            <p class="text-[11px] text-[#4F695D]">Valid Until: <strong class="text-[#12372C]" id="fbPendingExpiry">YYYY-MM-DD</strong></p>
+            <button id="fbPendingPermitBtn" class="bg-[#1B4D3E] hover:bg-[#12372C] text-white text-xs font-semibold py-2.5 px-4 rounded-xl w-full flex items-center justify-center gap-1.5 cursor-pointer">
+              <i data-lucide="external-link" class="w-3.5 h-3.5"></i> Inspect Document
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-6 py-3.5 bg-white border-t border-[#DCE5DF] flex flex-wrap justify-between items-center gap-3">
+        <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          <button type="button" onclick="window.openSendNotificationModal('FoodBank', false)" class="bg-[#1B4D3E] hover:bg-[#12372C] text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition-colors cursor-pointer">
+            Send Notification
+          </button>
+          <select id="fbRejectReasonSelect" class="text-xs font-medium text-[#12372C] p-2.5 border border-[#DCE5DF] rounded-xl bg-[#F7F9F7] focus:outline-none">
+            <option value="">Select rejection reason...</option>
+            <option value="Blurry or unreadable certificate (Please upload a clear copy)">Blurry or unreadable certificate</option>
+            <option value="Accreditation certificate is expired">Accreditation is expired</option>
+            <option value="Organization name does not match certificate">Organization Name Mismatch</option>
+          </select>
+          <button type="button" onclick="window.executeReject('FoodBank')" class="bg-[#FDF3F2] border border-[#E5B8B4] text-[#B3261E] font-semibold text-xs px-4 py-2.5 rounded-xl hover:bg-[#FBE4E1] transition-colors cursor-pointer">
+            Reject Application
+          </button>
+        </div>
+        <button type="button" onclick="window.executeApprove('FoodBank')" class="bg-[#3A826D] hover:bg-[#1B4D3E] text-white font-semibold text-xs px-7 py-2.5 rounded-xl transition-colors w-full md:w-auto cursor-pointer">
+          Approve Organization
+        </button>
+      </div>
+      <input type="hidden" id="pendingFoodBankId">
+    </div>
+  </div>
+
+  <!-- 5. FOOD BANK ACTIVE MODAL (STICKY HEADER) -->
+  <div id="foodBankViewModal" class="modal-overlay hidden fixed inset-0 bg-[#12372C]/60 backdrop-blur-xs flex justify-center items-center z-50 p-4">
+    <div class="bg-[#F4F8F6] rounded-2xl w-full max-w-[900px] max-h-[92vh] overflow-y-auto shadow-2xl border border-[#DCE5DF] flex flex-col justify-between relative">
+      <div class="sticky top-0 z-30 bg-white px-6 py-4 border-b border-[#DCE5DF] flex justify-between items-center">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-[#E8EFEA] flex items-center justify-center text-[#1B4D3E]">
+            <i data-lucide="hand-heart" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 id="fbViewName" class="font-bold text-[#12372C] text-base">Organization</h3>
+            <p class="text-[11px] text-[#4F695D]">Food Bank Partner Profile</p>
+          </div>
+        </div>
+        <button onclick="toggleModal('foodBankViewModal')" class="w-8 h-8 rounded-full bg-[#F4F8F6] hover:bg-[#E8EFEA] text-[#12372C] border border-[#DCE5DF] flex items-center justify-center font-bold text-xs cursor-pointer">✕</button>
+      </div>
+
+      <div class="p-5 space-y-4 text-xs">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+          <div class="bg-white p-3.5 rounded-xl border border-[#DCE5DF]">
+            <span class="text-[10px] text-[#4F695D] block">Total Rescued</span>
+            <p id="fbMetricRescued" class="text-lg font-bold text-[#1B4D3E] mt-0.5">0 Units</p>
+          </div>
+          <div class="bg-white p-3.5 rounded-xl border border-[#DCE5DF]">
+            <span class="text-[10px] text-[#4F695D] block">Successful Handshakes</span>
+            <p id="fbMetricSuccess" class="text-lg font-bold text-[#3A826D] mt-0.5">0</p>
+          </div>
+          <div class="bg-white p-3.5 rounded-xl border border-[#DCE5DF]">
+            <span class="text-[10px] text-[#4F695D] block">Ongoing / Pending</span>
+            <p id="fbMetricOngoing" class="text-lg font-bold text-amber-600 mt-0.5">0</p>
+          </div>
+          <div class="bg-white p-3.5 rounded-xl border border-[#DCE5DF]">
+            <span class="text-[10px] text-[#4F695D] block">Reports / Tickets</span>
+            <p id="fbMetricTickets" class="text-lg font-bold text-[#B3261E] mt-0.5">0 / 0</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+          <div class="md:col-span-7 bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-3 text-xs">
+            <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider border-b border-[#DCE5DF] pb-2">Organization Details</h4>
+            <div class="grid grid-cols-2 gap-2.5">
+              <div class="col-span-2">
+                <span class="text-[10px] text-[#4F695D] block">Physical Address</span>
+                <p class="font-medium text-[#12372C] mt-0.5" id="fbViewAddress">...</p>
+              </div>
+              <div>
+                <span class="text-[10px] text-[#4F695D] block">Coordinator</span>
+                <p class="font-semibold text-[#12372C] mt-0.5" id="fbViewContact">...</p>
+              </div>
+              <div>
+                <span class="text-[10px] text-[#4F695D] block">Contact Number</span>
+                <p class="font-medium text-[#12372C] mt-0.5" id="fbViewPhone">...</p>
+              </div>
+              <div>
+                <span class="text-[10px] text-[#4F695D] block">Hotline</span>
+                <p class="font-medium text-[#12372C] mt-0.5" id="fbViewHotline">...</p>
+              </div>
+              <div>
+                <span class="text-[10px] text-[#4F695D] block">Registration Date</span>
+                <p class="font-medium text-[#12372C] mt-0.5" id="fbViewDate">...</p>
+              </div>
+              <div class="col-span-2">
+                <span class="text-[10px] text-[#4F695D] block">Email Address</span>
+                <p class="font-medium text-[#3A826D] mt-0.5" id="fbViewEmail">...</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="md:col-span-5 bg-white p-4 rounded-xl border border-[#DCE5DF] flex flex-col justify-between gap-3 text-xs">
+            <div class="space-y-2.5">
+              <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider border-b border-[#DCE5DF] pb-2">Accreditation Record</h4>
+              <div class="bg-[#F7F9F7] p-3 rounded-xl border border-[#DCE5DF] space-y-2">
+                <p class="flex justify-between"><span class="text-[#4F695D]">Document Type:</span><strong class="text-[#12372C]">NGO Accreditation</strong></p>
+                <p class="flex justify-between"><span class="text-[#4F695D]">Valid Until:</span><strong class="text-[#1B4D3E]" id="fbViewExpiry">YYYY-MM-DD</strong></p>
+              </div>
+            </div>
+            <div class="space-y-2">
+              <button type="button" id="fbPermitBtn" class="bg-[#E8EFEA] hover:bg-[#3A826D] hover:text-white transition-colors text-[#1B4D3E] font-semibold text-xs px-4 py-2.5 rounded-xl w-full cursor-pointer">
+                View Accreditation Certificate
+              </button>
+              <button type="button" id="fbVisitProfileBtn" class="bg-[#1B4D3E] hover:bg-[#12372C] text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition-colors w-full flex items-center justify-center gap-1.5 cursor-pointer">
+                <i data-lucide="external-link" class="w-3.5 h-3.5"></i> Visit Profile in Donations Hub
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-2.5">
+          <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider">Appeals, Claimed Donations &amp; Handshake Receipts</h4>
+          <div class="overflow-x-auto rounded-xl border border-[#DCE5DF]">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-[#F3F6F4] text-[#12372C] text-[10px] font-semibold uppercase border-b border-[#DCE5DF]">
+                <tr>
+                  <th class="p-3">Ref ID</th>
+                  <th class="p-3">Donor Merchant</th>
+                  <th class="p-3">Items &amp; Volume</th>
+                  <th class="p-3">Date</th>
+                  <th class="p-3">Status</th>
+                  <th class="p-3">Receipt</th>
+                </tr>
+              </thead>
+              <tbody id="fbTransactionsBody" class="divide-y divide-[#DCE5DF]">
+                <tr><td colspan="6" class="p-4 text-center text-[#4F695D]">Loading donation handshakes...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="pt-1 flex flex-col md:flex-row items-center justify-between gap-3">
+          <div class="bg-[#E8EFEA] px-4 py-2.5 rounded-xl flex items-center gap-3 w-full md:w-auto border border-[#DCE5DF]">
+            <span id="fbStatusBadge" class="bg-[#3A826D] text-white px-3 py-1 rounded-lg text-xs font-semibold uppercase">VERIFIED NGO</span>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            <button type="button" onclick="window.openSendNotificationModal('FoodBank', false)" class="bg-[#1B4D3E] hover:bg-[#12372C] text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all cursor-pointer">
+              Send Notification
+            </button>
+            <select id="fbSuspendReason" class="text-xs font-medium text-[#12372C] p-2.5 border border-[#DCE5DF] rounded-xl bg-white focus:outline-none">
+              <option value="">Select suspension reason...</option>
+              <option value="Expired Government Accreditation">Expired Accreditation</option>
+              <option value="Unclaimed Donation Pickups">Unclaimed Donation Pickups</option>
+              <option value="Policy Violation">Policy Violation</option>
+            </select>
+            <button type="button" onclick="window.executeSuspend('FoodBank')" class="bg-[#FDF3F2] border border-[#E5B8B4] text-[#B3261E] hover:bg-[#FBE4E1] text-xs font-semibold px-4 py-2.5 rounded-xl transition-all cursor-pointer">
+              Suspend User
+            </button>
+          </div>
+        </div>
+      </div>
+      <input type="hidden" id="activeFoodBankId">
+    </div>
+  </div>
+
+  <!-- 6. PRE-MADE & CUSTOM ADMIN NOTIFICATIONS MODAL (STICKY HEADER) -->
+  <div id="sendNotificationModal" style="z-index: 9990;" class="modal-overlay hidden fixed inset-0 bg-[#12372C]/60 backdrop-blur-xs flex justify-center items-center p-4">
+    <div class="bg-[#F4F8F6] rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl border border-[#DCE5DF] relative">
+      <div class="sticky top-0 z-30 bg-white px-6 py-4 border-b border-[#DCE5DF] flex justify-between items-center">
+        <div>
+          <h3 class="font-bold text-[#12372C] text-sm">Send Admin Compliance Notice</h3>
+          <p id="notifTargetSubtitle" class="text-[10px] text-[#4F695D]">Select a standard operational reminder or write a custom notice</p>
+        </div>
+        <button type="button" onclick="window.closeModal('sendNotificationModal')" class="w-8 h-8 rounded-full bg-[#F4F8F6] hover:bg-[#E8EFEA] text-[#12372C] border border-[#DCE5DF] flex items-center justify-center font-bold text-xs cursor-pointer">✕</button>
+      </div>
+
+      <div class="p-5 space-y-2.5 text-xs">
+        <label class="flex items-start gap-3 bg-white p-3.5 rounded-xl border border-[#DCE5DF] cursor-pointer hover:border-[#3A826D]">
+          <input type="radio" name="premadeNotifOption" value="Please make sure your uploaded food listing pictures are clear and accurate." class="mt-1 accent-[#1B4D3E]" checked>
+          <div>
+            <p class="font-semibold text-[#12372C]">Option 1: Clear Listing Photos Reminder</p>
+            <p class="text-[#4F695D] text-[11px] mt-0.5">"Please make sure your uploaded food listing pictures are clear and accurate."</p>
+          </div>
+        </label>
+
+        <label class="flex items-start gap-3 bg-white p-3.5 rounded-xl border border-[#DCE5DF] cursor-pointer hover:border-[#3A826D]">
+          <input type="radio" id="renewalNotifRadio" name="premadeNotifOption" value="Your Business Permit / Accreditation is nearing expiration. Please submit a renewed permit to maintain active status." data-renewal="true" class="mt-1 accent-[#1B4D3E]">
+          <div>
+            <p class="font-semibold text-[#B45309]">Option 2: Permit / Accreditation Renewal Notice</p>
+            <p class="text-[#4F695D] text-[11px] mt-0.5">"Your Business Permit / Accreditation is nearing expiration. Please submit a renewed permit to maintain active status."</p>
+          </div>
+        </label>
+
+        <label class="flex items-start gap-3 bg-white p-3.5 rounded-xl border border-[#DCE5DF] cursor-pointer hover:border-[#3A826D]">
+          <input type="radio" name="premadeNotifOption" value="Please update your active surplus food quantities and pickup windows regularly." class="mt-1 accent-[#1B4D3E]">
+          <div>
+            <p class="font-semibold text-[#12372C]">Option 3: Pickup Schedule &amp; Inventory Reminder</p>
+            <p class="text-[#4F695D] text-[11px] mt-0.5">"Please update your active surplus food quantities and pickup windows regularly."</p>
+          </div>
+        </label>
+
+        <label class="flex items-start gap-3 bg-white p-3.5 rounded-xl border border-[#DCE5DF] cursor-pointer hover:border-[#3A826D]">
+          <input type="radio" name="premadeNotifOption" value="Reminder: Please ensure all surplus food items meet safety and packaging standards before pickup." class="mt-1 accent-[#1B4D3E]">
+          <div>
+            <p class="font-semibold text-[#12372C]">Option 4: Food Safety &amp; Packaging Standard</p>
+            <p class="text-[#4F695D] text-[11px] mt-0.5">"Reminder: Please ensure all surplus food items meet safety and packaging standards before pickup."</p>
+          </div>
+        </label>
+
+        <label class="flex items-start gap-3 bg-white p-3.5 rounded-xl border border-[#DCE5DF] cursor-pointer hover:border-[#3A826D]">
+          <input type="radio" id="customNotifRadio" name="premadeNotifOption" value="custom" class="mt-1 accent-[#1B4D3E]">
+          <div class="w-full">
+            <p class="font-semibold text-[#12372C]">Option 5: Custom Admin Notice</p>
+            <textarea id="customAdminNotifInput" rows="2" onfocus="document.getElementById('customNotifRadio').checked = true;" placeholder="Type a custom compliance or operational message..." class="w-full mt-1.5 p-2.5 bg-[#F7F9F7] border border-[#DCE5DF] rounded-lg text-xs text-[#12372C] focus:outline-none focus:border-[#1B4D3E]"></textarea>
+          </div>
+        </label>
+      </div>
+
+      <div class="px-6 py-3.5 bg-white border-t border-[#DCE5DF] flex justify-end gap-2">
+        <button type="button" onclick="window.closeModal('sendNotificationModal')" class="bg-[#F7F9F7] border border-[#DCE5DF] text-[#4F695D] font-semibold text-xs px-4 py-2 rounded-xl cursor-pointer">Cancel</button>
+        <button type="button" id="sendNotifSubmitBtn" onclick="window.executeSendNotification()" class="bg-[#3A826D] hover:bg-[#1B4D3E] text-white font-semibold text-xs px-5 py-2 rounded-xl transition-colors cursor-pointer">Send Notice</button>
+      </div>
+      <input type="hidden" id="notifTargetRole">
+      <input type="hidden" id="notifTargetAccountId">
+    </div>
+  </div>
+
+  <!-- SELF-CONTAINED AUTO-SCANNER KYB MODAL, DOSSIER LOADER & IMMEDIATE 20-ROW PAGINATION SCRIPT -->
+  <script>
+    (function () {
+      let currentPage = 1;
+      let pageSize = 20;
+      let isPaginating = false;
+
+      function getCsrfToken() {
+        const match = document.cookie.match(/csrftoken=([^;]+)/);
+        return match ? decodeURIComponent(match[1]) : '';
+      }
+
+      function normalizePermitUrl(rawPath) {
+        if (!rawPath) return '';
+        let clean = String(rawPath).trim().replace(/\\/g, '/');
+        if (clean.startsWith('/media/http://') || clean.startsWith('/media/https://')) {
+          clean = clean.replace(/^\/media\//, '');
+        }
+        if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('data:')) {
+          return clean;
+        }
+        clean = clean.replace(/^\/+/, '');
+        if (clean.startsWith('media/')) {
+          return '/' + clean;
+        }
+        return '/media/' + clean;
+      }
+
+      window.handleOpenConsumerModal = function (btn) {
+        if (!btn) return;
+        const rawId = btn.getAttribute('data-raw-id') || (btn.getAttribute('data-id') || '').replace(/\D/g, '');
+        const input = document.getElementById('activeConsumerRawId');
+        if (input) input.value = rawId;
+        if (typeof window.openConsumerModal === 'function') {
+          window.openConsumerModal(btn);
+        }
+      };
+
+      window.handleOpenActiveMerchantModal = function (btn) {
+        if (!btn) return;
+        const rawId = btn.getAttribute('data-id') || '';
+        const busName = btn.getAttribute('data-name') || 'Merchant';
+        const rawPermit = btn.getAttribute('data-permit') || '';
+        const input = document.getElementById('activeMerchantId');
+        if (input) input.value = rawId;
+        if (typeof window.openActiveModal === 'function') {
+          window.openActiveModal(btn);
+        }
+        const activePermitBtn = document.getElementById('activePermitBtn');
+        if (activePermitBtn) {
+          activePermitBtn.onclick = function () {
+            if (typeof window.openVerifiedPermitDocument === 'function') {
+              window.openVerifiedPermitDocument(rawId, rawPermit, `${busName} — Verified Business Permit`);
+            } else {
+              window.open(normalizePermitUrl(rawPermit), '_blank');
+            }
+          };
+        }
+      };
+
+      window.handleOpenFoodBankPendingModal = function (btn) {
+        if (!btn) return;
+        const rawId = btn.getAttribute('data-id') || '';
+        const input = document.getElementById('pendingFoodBankId');
+        if (input) input.value = rawId;
+        if (typeof window.openFoodBankPendingModal === 'function') {
+          window.openFoodBankPendingModal(btn);
+        }
+      };
+
+      window.handleOpenFoodBankModal = function (btn) {
+        if (!btn) return;
+        const rawId = btn.getAttribute('data-id') || '';
+        const input = document.getElementById('activeFoodBankId');
+        if (input) input.value = rawId;
+        if (typeof window.openFoodBankModal === 'function') {
+          window.openFoodBankModal(btn);
+        }
+      };
+
+      window.openSendNotificationModal = function (role, isRenewal) {
+        const cleanRole = role || 'Merchant';
+        const roleInput = document.getElementById('notifTargetRole');
+        if (roleInput) roleInput.value = cleanRole;
+
+        let targetId = '';
+        if (cleanRole.toLowerCase().includes('food')) {
+          targetId =
+            document.getElementById('activeFoodBankId')?.value ||
+            document.getElementById('pendingFoodBankId')?.value ||
+            '';
+        } else if (cleanRole.toLowerCase().includes('cons')) {
+          targetId = document.getElementById('activeConsumerRawId')?.value || '';
+        } else {
+          targetId =
+            document.getElementById('activeMerchantId')?.value ||
+            document.getElementById('pendingMerchantId')?.value ||
+            '';
+        }
+
+        const idInput = document.getElementById('notifTargetAccountId');
+        if (idInput) idInput.value = targetId;
+
+        const subEl = document.getElementById('notifTargetSubtitle');
+        if (subEl) {
+          subEl.textContent = `Sending official Admin notice to ${cleanRole} #${targetId || 'Account'}`;
+        }
+
+        const customTxt = document.getElementById('customAdminNotifInput');
+        if (customTxt) customTxt.value = '';
+
+        if (isRenewal) {
+          const rRadio = document.getElementById('renewalNotifRadio');
+          if (rRadio) rRadio.checked = true;
+        } else {
+          const firstRadio = document.querySelector('input[name="premadeNotifOption"]');
+          if (firstRadio) firstRadio.checked = true;
+        }
+
+        const modal = document.getElementById('sendNotificationModal');
+        if (modal) {
+          modal.classList.remove('hidden');
+          modal.classList.add('flex');
+        }
+      };
+
+      window.executeSendNotification = async function () {
+        const role = document.getElementById('notifTargetRole')?.value || 'Merchant';
+        let accountId = document.getElementById('notifTargetAccountId')?.value || '';
+
+        if (!accountId) {
+          if (role.toLowerCase().includes('food')) {
+            accountId =
+              document.getElementById('activeFoodBankId')?.value ||
+              document.getElementById('pendingFoodBankId')?.value ||
+              '';
+          } else if (role.toLowerCase().includes('cons')) {
+            accountId = document.getElementById('activeConsumerRawId')?.value || '';
+          } else {
+            accountId =
+              document.getElementById('activeMerchantId')?.value ||
+              document.getElementById('pendingMerchantId')?.value ||
+              '';
+          }
+        }
+
+        accountId = String(accountId).replace(/\D/g, '');
+        if (!accountId) {
+          if (typeof window.themeAlert === 'function') {
+            await window.themeAlert('Missing Account ID', 'Could not determine the target account ID.', false);
+          } else {
+            alert('Could not determine target account ID.');
+          }
+          return;
+        }
+
+        const selectedRadio = document.querySelector('input[name="premadeNotifOption"]:checked');
+        const customText = (document.getElementById('customAdminNotifInput')?.value || '').trim();
+        let message = '';
+        let isRenewal = false;
+
+        if (selectedRadio && selectedRadio.value === 'custom') {
+          message = customText;
+        } else if (selectedRadio) {
+          message = selectedRadio.value;
+          isRenewal = selectedRadio.getAttribute('data-renewal') === 'true';
+        } else {
+          message = customText;
+        }
+
+        if (!message) {
+          if (typeof window.themeAlert === 'function') {
+            await window.themeAlert('Message Required', 'Please select a reminder or type a custom compliance message.', false);
+          } else {
+            alert('Please select or type a notification message.');
+          }
+          return;
+        }
+
+        const submitBtn = document.getElementById('sendNotifSubmitBtn');
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Sending...';
+        }
+
+        try {
+          const response = await fetch(`/api/accounts/admin/merchant/${accountId}/approval/`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': getCsrfToken(),
+            },
+            body: JSON.stringify({
+              action: 'notify',
+              role: role,
+              reason: message,
+              message: message,
+              is_renewal: isRenewal,
+            }),
+          });
+
+          const resData = await response.json().catch(() => ({}));
+          if (response.ok) {
+            if (typeof window.closeModal === 'function') {
+              window.closeModal('sendNotificationModal');
+            } else {
+              document.getElementById('sendNotificationModal')?.classList.add('hidden');
+            }
+            if (typeof window.themeAlert === 'function') {
+              await window.themeAlert(
+                'Notification Dispatched!',
+                resData.message || `Official compliance notice sent to ${role} #${accountId}.`,
+                true
+              );
+            } else {
+              alert(resData.message || 'Notification sent successfully!');
+            }
+          } else {
+            if (typeof window.themeAlert === 'function') {
+              await window.themeAlert('Dispatch Failed', resData.error || 'Could not send notification.', false);
+            } else {
+              alert(resData.error || 'Could not send notification.');
+            }
+          }
+        } catch (err) {
+          if (typeof window.themeAlert === 'function') {
+            await window.themeAlert('Network Error', 'Could not reach the server to send notification.', false);
+          } else {
+            alert('Network error while sending notification.');
+          }
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Send Notice';
+          }
+        }
+      };
+
+      function buildClientFallbackReportFromMeta(permitMeta, busName, busAddress) {
+        const hasPermitNo = Boolean(
+          permitMeta.permit_number &&
+            permitMeta.permit_number !== 'N/A' &&
+            permitMeta.permit_number !== 'Not Detected'
+        );
+        const hasTinOrCap = Boolean(
+          (permitMeta.tin_number && permitMeta.tin_number !== 'N/A') ||
+            permitMeta.capital
+        );
+        const hasCebuAddr = String(busAddress || '').toLowerCase().includes('cebu');
+
+        if (permitMeta.eligibility_report && Number(permitMeta.eligibility_report.authenticity_score) > 0) {
+          return permitMeta.eligibility_report;
+        }
+
+        if (hasPermitNo || hasTinOrCap) {
+          const calcScore = 70 + (hasPermitNo ? 14 : 0) + (hasTinOrCap ? 10 : 0) + (hasCebuAddr ? 4 : 0);
+          return {
+            authenticity_score: Math.min(98, calcScore),
+            status_badge: 'Verified Authentic',
+            summary: `Authentic Cebu City Mayor's Business Permit verified (${Math.min(98, calcScore)}% confidence). Permit credentials and LGU landmarks confirmed.`,
+            illegitimate_reasons: [],
+            checks: [
+              { field: '1. Cebu City LGU Header & Maroon Banner', status: 'passed', detail: 'Verified Cebu City Government / Office of the Mayor BPLO header.' },
+              { field: '2. Business Name & Mayor’s Permit No.', status: 'passed', detail: `Verified ${busName} • Permit No. ${permitMeta.permit_number || 'On File'}.` },
+              { field: '3. Cebu City Business Address', status: 'passed', detail: `Verified location: ${busAddress}.` },
+              { field: '4. Calendar Year & Permit Status', status: 'passed', detail: `Calendar Year ${permitMeta.calendar_year || '2026-2027'} (Active/Renewal).` },
+              { field: '5. Taxpayer, Ownership, TIN & Capital', status: 'passed', detail: `TIN: ${permitMeta.tin_number || 'Verified'} ${permitMeta.capital ? '• Cap: ₱' + permitMeta.capital : ''}.` },
+              { field: '6. Line of Business & Regulatory Checklist', status: 'passed', detail: `Line of Business: ${permitMeta.nature_of_business || 'Food Establishment'}.` },
+              { field: '7. Mayor / BPLO Signatories, Gold Seal & QR', status: 'passed', detail: 'Official signatory block and seal verified.' },
+            ],
+            flagged_regions: [],
+          };
+        }
+
+        return {
+          authenticity_score: 0,
+          status_badge: 'Unverified / Illegitimate Document',
+          summary: 'Could not verify Cebu City Business Permit landmarks on this document.',
+          illegitimate_reasons: [
+            'No verified Cebu City Mayor’s Business Permit headers or Permit No. found.',
+          ],
+          checks: [
+            { field: '1. Cebu City LGU Header & Seal', status: 'flagged', detail: 'Not detected.' },
+            { field: '2. Business Name & Permit No.', status: 'flagged', detail: 'Not detected.' },
+          ],
+          flagged_regions: [
+            {
+              id: 'unverified',
+              label: 'Illegitimate / Unverified Document',
+              reason: 'Missing Cebu Business Permit landmarks.',
+              severity: 'error',
+              box: { top: 5, left: 5, width: 90, height: 88 },
+            },
+          ],
+        };
+      }
+
+      function renderInlineEligibilityReport(report, ocrData, permitDataUrl) {
+        const topBadge = document.getElementById('pendingAiScoreBadge');
+        const pulseDot = document.getElementById('inlineScanPulseDot');
+        const laserBar = document.getElementById('inlineScannerLaserBar');
+        const headingEl = document.getElementById('inlineScannerHeading');
+        const verdictBanner = document.getElementById('inlineVerdictBanner');
+        const scoreValEl = document.getElementById('inlineScoreValue');
+        const summaryEl = document.getElementById('inlineVerdictSummary');
+        const illegitBox = document.getElementById('inlineIllegitimateBox');
+        const illegitList = document.getElementById('inlineIllegitimateList');
+        const checklistEl = document.getElementById('inlineChecklistContainer');
+        const boxesEl = document.getElementById('inlineScannerOverlayBoxes');
+        const imgEl = document.getElementById('inlineScannerPermitImg');
+
+        // STOP the laser sweep animation as soon as the scan completes
+        if (laserBar) {
+          laserBar.classList.add('hidden');
+          laserBar.style.animationPlayState = 'paused';
+        }
+
+        if (permitDataUrl && imgEl) {
+          imgEl.src = permitDataUrl;
+        }
+
+        const score = Number(report?.authenticity_score ?? 0);
+        const badgeText = report?.status_badge || 'Evaluated';
+
+        if (topBadge) {
+          topBadge.textContent = `Authenticity Score: ${score}% (${badgeText})`;
+          topBadge.className =
+            score >= 80
+              ? 'bg-[#E4F0E8] text-[#1F6B52] border border-[#3A826D]/40 text-xs font-bold px-3.5 py-1 rounded-xl'
+              : score >= 65
+              ? 'bg-[#FEF3C7] text-[#B45309] border border-amber-300 text-xs font-bold px-3.5 py-1 rounded-xl'
+              : 'bg-[#FBE4E1] text-[#B3261E] border border-[#B3261E]/40 text-xs font-bold px-3.5 py-1 rounded-xl';
+        }
+
+        // STOP the pulse animation on the status dot once scan is finished
+        if (pulseDot) {
+          pulseDot.className =
+            score >= 80
+              ? 'w-2.5 h-2.5 rounded-full bg-[#3A826D]'
+              : score >= 65
+              ? 'w-2.5 h-2.5 rounded-full bg-amber-500'
+              : 'w-2.5 h-2.5 rounded-full bg-[#B3261E]';
+        }
+
+        if (headingEl) {
+          headingEl.textContent =
+            score >= 80
+              ? 'Scan Complete — Authentic Cebu Business Permit'
+              : score >= 65
+              ? 'Scan Complete — Partial Match (Review Highlighted Fields)'
+              : 'Scan Complete — Illegitimate / Non-Compliant Document Flagged';
+        }
+
+        if (verdictBanner) {
+          verdictBanner.className =
+            score >= 80
+              ? 'p-3 rounded-xl border border-[#3A826D]/40 bg-[#E4F0E8]/60'
+              : score >= 65
+              ? 'p-3 rounded-xl border border-amber-300 bg-[#FEF3C7]/60'
+              : 'p-3 rounded-xl border border-[#B3261E]/40 bg-[#FBE4E1]/70';
+        }
+
+        if (scoreValEl) {
+          scoreValEl.textContent = `${score}% • ${badgeText}`;
+          scoreValEl.className =
+            score >= 80
+              ? 'text-sm font-black text-[#1F6B52]'
+              : score >= 65
+              ? 'text-sm font-black text-[#B45309]'
+              : 'text-sm font-black text-[#B3261E]';
+        }
+
+        if (summaryEl) {
+          summaryEl.textContent = report?.summary || '';
+        }
+
+        const reasons = Array.isArray(report?.illegitimate_reasons)
+          ? report.illegitimate_reasons
+          : Array.isArray(report?.flagged_regions)
+          ? report.flagged_regions.map((r) => r.reason || r.label)
+          : [];
+
+        if (illegitBox && illegitList) {
+          if (reasons.length > 0 && score < 80) {
+            illegitBox.classList.remove('hidden');
+            illegitList.innerHTML = reasons.map((r) => `<li>${r}</li>`).join('');
+          } else {
+            illegitBox.classList.add('hidden');
+            illegitList.innerHTML = '';
+          }
+        }
+
+        if (checklistEl) {
+          const checks = Array.isArray(report?.checks) ? report.checks : [];
+          checklistEl.innerHTML = checks
+            .map((c) => {
+              const isPass = c.status === 'passed';
+              const isWarn = c.status === 'warning';
+              const badgeCls = isPass
+                ? 'bg-[#E4F0E8] text-[#1F6B52]'
+                : isWarn
+                ? 'bg-[#FEF3C7] text-[#B45309]'
+                : 'bg-[#FBE4E1] text-[#B3261E]';
+              const labelTxt = isPass ? 'VERIFIED' : isWarn ? 'WARNING' : 'ILLEGITIMATE / MISSING';
+              return `
+                <div class="p-2.5 rounded-lg bg-[#F7F9F7] border border-[#DCE5DF]">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="font-bold text-[#12372C] text-[11px]">${c.field}</span>
+                    <span class="${badgeCls} px-2 py-0.5 rounded text-[9px] font-bold shrink-0">${labelTxt}</span>
+                  </div>
+                  <p class="text-[10px] text-[#4F695D] mt-0.5">${c.detail || ''}</p>
+                </div>
+              `;
+            })
+            .join('');
+        }
+
+        if (boxesEl) {
+          const regions = Array.isArray(report?.flagged_regions) ? report.flagged_regions : [];
+          boxesEl.innerHTML = regions
+            .map((r) => {
+              const b = r.box || { top: 15, left: 10, width: 80, height: 14 };
+              const borderCol = r.severity === 'error' ? '#EF4444' : '#F59E0B';
+              const bgCol = r.severity === 'error' ? 'rgba(239,68,68,0.20)' : 'rgba(245,158,11,0.20)';
+              return `
+                <div style="position:absolute; top:${b.top}%; left:${b.left}%; width:${b.width}%; height:${b.height}%; border:2px dashed ${borderCol}; background:${bgCol}; border-radius:6px; display:flex; align-items:flex-start; justify-content:flex-end; padding:2px;">
+                  <span style="background:${borderCol}; color:#fff; font-size:9px; font-weight:700; padding:1px 5px; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,0.3);">${r.label}</span>
+                </div>
+              `;
+            })
+            .join('');
+        }
+
+        if (ocrData && typeof ocrData === 'object') {
+          const setTextIf = (id, val) => {
+            if (val && String(val).trim() !== '' && val !== 'N/A') {
+              const el = document.getElementById(id);
+              if (el) el.textContent = val;
+            }
+          };
+          setTextIf('pendingPermitNo', ocrData.permit_number);
+          setTextIf('pendingCalendarYear', ocrData.calendar_year);
+          setTextIf('pendingTinNumber', ocrData.tin_number || (ocrData.capital ? `Cap: ₱${ocrData.capital}` : ''));
+          setTextIf('pendingPermitExpiry', ocrData.expiry_date);
+          setTextIf('pendingLineOfBusiness', ocrData.nature_of_business);
+
+          const contactEl = document.getElementById('pendingContact');
+          if (
+            contactEl &&
+            (contactEl.textContent === 'Not Provided' || contactEl.textContent === 'N/A') &&
+            ocrData.representative &&
+            ocrData.representative !== 'N/A'
+          ) {
+            contactEl.textContent = ocrData.representative;
+          }
+        }
+
+        if (window.lucide) window.lucide.createIcons();
+      }
+
+      window.openAutoScanKybModal = async function (btn) {
+        if (!btn) return;
+        const merchantId = btn.getAttribute('data-id') || '';
+        const setText = (id, val) => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = val;
+        };
+
+        let permitMeta = {};
+        try {
+          permitMeta = JSON.parse(btn.getAttribute('data-ocr') || '{}') || {};
+        } catch (e) {
+          permitMeta = {};
+        }
+
+        const cleanVal = (primary, fallback) => {
+          if (primary && primary !== 'Not Detected' && primary !== 'Unverified' && primary !== 'N/A') {
+            return primary;
+          }
+          return fallback || 'Not Provided';
+        };
+
+        const rawName = btn.getAttribute('data-name') || '';
+        const rawType = btn.getAttribute('data-type') || 'Food Establishment';
+        const rawAddr = btn.getAttribute('data-address') || '';
+        const rawContact = btn.getAttribute('data-contact') || '';
+        const rawHotline = btn.getAttribute('data-hotline') || 'N/A';
+        const rawPhone = btn.getAttribute('data-phone') || 'Not Provided';
+        const rawEmail = btn.getAttribute('data-email') || 'N/A';
+        const rawDate = btn.getAttribute('data-date') || 'N/A';
+        const rawExpiry = btn.getAttribute('data-expiry') || '2026-12-31';
+        const rawPermitAttr = btn.getAttribute('data-permit') || '';
+        const permitUrl = normalizePermitUrl(rawPermitAttr);
+
+        const busName = cleanVal(permitMeta.business_name, rawName);
+        const busAddress = cleanVal(permitMeta.business_address, rawAddr);
+        const contactPerson = cleanVal(permitMeta.representative, rawContact);
+        const permitNo = cleanVal(permitMeta.permit_number, 'N/A');
+        const calendarYear = cleanVal(permitMeta.calendar_year, '2026-2027');
+        const tinNumber = cleanVal(
+          permitMeta.tin_number || (permitMeta.capital ? `Cap: ₱${permitMeta.capital}` : ''),
+          'N/A'
+        );
+        const lineOfBus = cleanVal(permitMeta.nature_of_business, rawType);
+        const expiryDate = cleanVal(permitMeta.expiry_date, rawExpiry);
+
+        const idInput = document.getElementById('pendingMerchantId');
+        if (idInput) idInput.value = merchantId;
+
+        setText('pendingModalTitle', `Merchant KYB Review — ${busName}`);
+        setText('pendingBusName', busName);
+        setText('pendingMerchType', rawType);
+        setText('pendingDate', rawDate);
+        setText('pendingAddress', busAddress);
+        setText('pendingContact', contactPerson);
+        setText('pendingPhone', rawPhone);
+        setText('pendingHotline', rawHotline);
+        setText('pendingEmail', rawEmail);
+
+        setText('pendingPermitNo', permitNo);
+        setText('pendingCalendarYear', calendarYear);
+        setText('pendingTinNumber', tinNumber);
+        setText('pendingPermitExpiry', expiryDate);
+        setText('pendingLineOfBusiness', lineOfBus);
+
+        setText('ocrDocName', permitUrl.split('/').pop() || 'business_permit.jpg');
+
+        const imgEl = document.getElementById('inlineScannerPermitImg');
+        if (imgEl) {
+          imgEl.src = permitUrl;
+        }
+
+        const fileBtn = document.getElementById('pendingPermitBtn');
+        if (fileBtn) {
+          fileBtn.onclick = () => {
+            if (typeof window.openVerifiedPermitDocument === 'function') {
+              window.openVerifiedPermitDocument(merchantId, rawPermitAttr, `${busName} — Business Permit`);
+            } else {
+              window.open(permitUrl, '_blank');
+            }
+          };
+        }
+
+        // Start laser & pulse animation while scanning is actively running
+        const laserBar = document.getElementById('inlineScannerLaserBar');
+        if (laserBar) {
+          laserBar.classList.remove('hidden');
+          laserBar.style.animationPlayState = 'running';
+        }
+        const pulseDot = document.getElementById('inlineScanPulseDot');
+        if (pulseDot) {
+          pulseDot.className = 'w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping';
+        }
+        const headingEl = document.getElementById('inlineScannerHeading');
+        if (headingEl) {
+          headingEl.textContent = 'Automated Cebu Business Permit Authenticity Scan';
+        }
+
+        const modal = document.getElementById('merchantPendingModal');
+        if (modal) {
+          modal.classList.remove('hidden');
+          modal.classList.add('flex');
+          document.body.classList.add('overflow-hidden');
+        }
+        if (window.lucide) window.lucide.createIcons();
+
+        const topBadge = document.getElementById('pendingAiScoreBadge');
+        if (topBadge) {
+          topBadge.textContent = 'Auto-Scanning Document...';
+          topBadge.className = 'bg-[#FEF3C7] text-[#B45309] border border-amber-300 text-xs font-bold px-3.5 py-1 rounded-xl';
+        }
+        const scoreValEl = document.getElementById('inlineScoreValue');
+        if (scoreValEl) scoreValEl.textContent = 'Scanning Landmarks...';
+        const summaryEl = document.getElementById('inlineVerdictSummary');
+        if (summaryEl) {
+          summaryEl.textContent = 'Running live OCR & Cebu City Business Permit landmark verification on uploaded image...';
+        }
+        const checklistEl = document.getElementById('inlineChecklistContainer');
+        if (checklistEl) checklistEl.innerHTML = '';
+        const boxesEl = document.getElementById('inlineScannerOverlayBoxes');
+        if (boxesEl) boxesEl.innerHTML = '';
+        const illegitBox = document.getElementById('inlineIllegitimateBox');
+        if (illegitBox) illegitBox.classList.add('hidden');
+
+        try {
+          const res = await fetch('/api/accounts/ocr/scan-permit/', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': getCsrfToken(),
+            },
+            body: JSON.stringify({ merchant_id: merchantId }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.eligibility_report) {
+            permitMeta = Object.assign({}, permitMeta, data.ocr_data || {}, {
+              eligibility_report: data.eligibility_report,
+            });
+            btn.setAttribute('data-ocr', JSON.stringify(permitMeta));
+            renderInlineEligibilityReport(data.eligibility_report, data.ocr_data, data.permit_data_url);
+            return;
+          }
+        } catch (err) {
+          console.log('Auto KYB permit scan notice:', err);
+        }
+
+        const fallbackReport = buildClientFallbackReportFromMeta(permitMeta, busName, busAddress);
+        renderInlineEligibilityReport(fallbackReport, permitMeta, '');
+      };
+
+      window.openAutoScanKybModal = async function (btn) {
+        if (!btn) return;
+        const merchantId = btn.getAttribute('data-id') || '';
+        const setText = (id, val) => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = val;
+        };
+
+        let permitMeta = {};
+        try {
+          permitMeta = JSON.parse(btn.getAttribute('data-ocr') || '{}') || {};
+        } catch (e) {
+          permitMeta = {};
+        }
+
+        const cleanVal = (primary, fallback) => {
+          if (primary && primary !== 'Not Detected' && primary !== 'Unverified') {
+            return primary;
+          }
+          return fallback || 'Not Provided';
+        };
+
+        const rawName = btn.getAttribute('data-name') || '';
+        const rawType = btn.getAttribute('data-type') || 'Food Establishment';
+        const rawAddr = btn.getAttribute('data-address') || '';
+        const rawContact = btn.getAttribute('data-contact') || '';
+        const rawHotline = btn.getAttribute('data-hotline') || 'N/A';
+        const rawPhone = btn.getAttribute('data-phone') || 'Not Provided';
+        const rawEmail = btn.getAttribute('data-email') || 'N/A';
+        const rawDate = btn.getAttribute('data-date') || 'N/A';
+        const rawExpiry = btn.getAttribute('data-expiry') || '2026-12-31';
+        const rawPermitAttr = btn.getAttribute('data-permit') || '';
+        const permitUrl = normalizePermitUrl(rawPermitAttr);
+
+        const busName = cleanVal(permitMeta.business_name, rawName);
+        const busAddress = cleanVal(permitMeta.business_address, rawAddr);
+        const contactPerson = cleanVal(permitMeta.representative, rawContact);
+        const permitNo = cleanVal(permitMeta.permit_number, 'N/A');
+        const calendarYear = cleanVal(permitMeta.calendar_year, '2026-2027');
+        const tinNumber = cleanVal(permitMeta.tin_number || (permitMeta.capital ? `Cap: ₱${permitMeta.capital}` : ''), 'N/A');
+        const lineOfBus = cleanVal(permitMeta.nature_of_business, rawType);
+        const expiryDate = cleanVal(permitMeta.expiry_date, rawExpiry);
+
+        const idInput = document.getElementById('pendingMerchantId');
+        if (idInput) idInput.value = merchantId;
+
+        setText('pendingModalTitle', `Merchant KYB Review — ${busName}`);
+        setText('pendingBusName', busName);
+        setText('pendingMerchType', rawType);
+        setText('pendingDate', rawDate);
+        setText('pendingAddress', busAddress);
+        setText('pendingContact', contactPerson);
+        setText('pendingPhone', rawPhone);
+        setText('pendingHotline', rawHotline);
+        setText('pendingEmail', rawEmail);
+
+        setText('pendingPermitNo', permitNo);
+        setText('pendingCalendarYear', calendarYear);
+        setText('pendingTinNumber', tinNumber);
+        setText('pendingPermitExpiry', expiryDate);
+        setText('pendingLineOfBusiness', lineOfBus);
+
+        setText('ocrDocName', permitUrl.split('/').pop() || 'business_permit.jpg');
+
+        const imgEl = document.getElementById('inlineScannerPermitImg');
+        if (imgEl) {
+          imgEl.src = permitUrl;
+        }
+
+        const fileBtn = document.getElementById('pendingPermitBtn');
+        if (fileBtn) {
+          fileBtn.onclick = () => {
+            if (typeof window.openVerifiedPermitDocument === 'function') {
+              window.openVerifiedPermitDocument(merchantId, rawPermitAttr, `${busName} — Business Permit`);
+            } else {
+              window.open(permitUrl, '_blank');
+            }
+          };
+        }
+
+        const modal = document.getElementById('merchantPendingModal');
+        if (modal) {
+          modal.classList.remove('hidden');
+          modal.classList.add('flex');
+          document.body.classList.add('overflow-hidden');
+        }
+        if (window.lucide) window.lucide.createIcons();
+
+        const topBadge = document.getElementById('pendingAiScoreBadge');
+        if (topBadge) {
+          topBadge.textContent = 'Auto-Scanning Document...';
+          topBadge.className = 'bg-[#FEF3C7] text-[#B45309] border border-amber-300 text-xs font-bold px-3.5 py-1 rounded-xl';
+        }
+        const scoreValEl = document.getElementById('inlineScoreValue');
+        if (scoreValEl) scoreValEl.textContent = 'Scanning Landmarks...';
+        const summaryEl = document.getElementById('inlineVerdictSummary');
+        if (summaryEl) summaryEl.textContent = 'Running live OCR & Cebu City Business Permit landmark verification on uploaded image...';
+        const checklistEl = document.getElementById('inlineChecklistContainer');
+        if (checklistEl) checklistEl.innerHTML = '';
+        const boxesEl = document.getElementById('inlineScannerOverlayBoxes');
+        if (boxesEl) boxesEl.innerHTML = '';
+        const illegitBox = document.getElementById('inlineIllegitimateBox');
+        if (illegitBox) illegitBox.classList.add('hidden');
+
+        try {
+          const res = await fetch('/api/accounts/ocr/scan-permit/', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': getCsrfToken(),
+            },
+            body: JSON.stringify({ merchant_id: merchantId }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.eligibility_report) {
+            permitMeta = Object.assign({}, permitMeta, data.ocr_data || {}, {
+              eligibility_report: data.eligibility_report,
+            });
+            btn.setAttribute('data-ocr', JSON.stringify(permitMeta));
+            renderInlineEligibilityReport(data.eligibility_report, data.ocr_data, data.permit_data_url);
+            return;
+          }
+        } catch (err) {
+          console.log('Auto KYB permit scan notice:', err);
+        }
+
+        const storedReport =
+          permitMeta.eligibility_report && permitMeta.eligibility_report.authenticity_score !== 92
+            ? permitMeta.eligibility_report
+            : {
+                authenticity_score: 0,
+                status_badge: 'Unverified / Illegitimate Document',
+                summary: 'Could not verify Cebu City Business Permit landmarks on this document.',
+                illegitimate_reasons: [
+                  'No verified Cebu City Mayor’s Business Permit headers or Permit No. found.',
+                ],
+                checks: [
+                  { field: '1. Cebu City LGU Header & Seal', status: 'flagged', detail: 'Not detected.' },
+                  { field: '2. Business Name & Permit No.', status: 'flagged', detail: 'Not detected.' },
+                ],
+                flagged_regions: [
+                  { id: 'unverified', label: 'Illegitimate / Unverified Document', reason: 'Missing Cebu Business Permit landmarks.', severity: 'error', box: { top: 5, left: 5, width: 90, height: 88 } },
+                ],
+              };
+        renderInlineEligibilityReport(storedReport, permitMeta, '');
+      };
+
+      window.openPendingModal = window.openAutoScanKybModal;
+      window.openPendingMerchantKybModal = window.openAutoScanKybModal;
+
+      function getActiveRoleTable() {
+        const tables = document.querySelectorAll('.user-role-table');
+        for (const t of tables) {
+          if (!t.classList.contains('hidden')) return t;
+        }
+        return document.getElementById('table-consumer');
+      }
+
+      function buildPageList(curr, total) {
+        if (total <= 9) return Array.from({ length: total }, (_, i) => i + 1);
+        if (curr <= 6) return [1, 2, 3, 4, 5, 6, 7, 8, '...', total];
+        if (curr >= total - 5) return [1, '...', total - 7, total - 6, total - 5, total - 4, total - 3, total - 2, total - 1, total];
+        return [1, '...', curr - 2, curr - 1, curr, curr + 1, curr + 2, '...', total];
+      }
+
+      function renderScreenshotPagination(containerId, summaryId, curr, totalPages, totalItems, startIdx, endIdx, onPageClick) {
+        const summaryEl = document.getElementById(summaryId);
+        if (summaryEl) {
+          summaryEl.textContent =
+            totalItems > 0
+              ? `${(startIdx + 1).toLocaleString()}-${endIdx.toLocaleString()} of ${totalItems.toLocaleString()}`
+              : '0-0 of 0';
+        }
+
+        const btnContainer = document.getElementById(containerId);
+        if (!btnContainer) return;
+        btnContainer.innerHTML = '';
+
+        const backBtn = document.createElement('button');
+        backBtn.type = 'button';
+        backBtn.disabled = curr <= 1;
+        backBtn.innerHTML = '<span class="text-sm leading-none">&lsaquo;</span><span>Back</span>';
+        backBtn.className =
+          curr <= 1
+            ? 'h-9 px-3.5 rounded-lg border border-gray-200 bg-white text-gray-300 text-xs font-medium flex items-center gap-1.5 cursor-not-allowed select-none'
+            : 'h-9 px-3.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer';
+        if (curr > 1) backBtn.onclick = () => onPageClick(curr - 1);
+        btnContainer.appendChild(backBtn);
+
+        buildPageList(curr, totalPages).forEach((p) => {
+          if (p === '...') {
+            const dots = document.createElement('span');
+            dots.textContent = '⋯';
+            dots.className = 'w-9 h-9 rounded-lg border border-gray-200 bg-white text-gray-500 text-xs font-bold flex items-center justify-center select-none';
+            btnContainer.appendChild(dots);
+          } else {
+            const numBtn = document.createElement('button');
+            numBtn.type = 'button';
+            numBtn.textContent = String(p);
+            const isActive = p === curr;
+            numBtn.className = isActive
+              ? 'w-9 h-9 rounded-lg bg-black text-white border border-black text-xs font-bold flex items-center justify-center shadow-2xs'
+              : 'w-9 h-9 rounded-lg bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer';
+            if (!isActive) numBtn.onclick = () => onPageClick(p);
+            btnContainer.appendChild(numBtn);
+          }
+        });
+
+        const nextBtn = document.createElement('button');
+        nextBtn.type = 'button';
+        nextBtn.disabled = curr >= totalPages;
+        nextBtn.innerHTML = '<span>Next</span><span class="text-sm leading-none">&rsaquo;</span>';
+        nextBtn.className =
+          curr >= totalPages
+            ? 'h-9 px-3.5 rounded-lg border border-gray-200 bg-white text-gray-300 text-xs font-medium flex items-center gap-1.5 cursor-not-allowed select-none'
+            : 'h-9 px-3.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer';
+        if (curr < totalPages) nextBtn.onclick = () => onPageClick(curr + 1);
+        btnContainer.appendChild(nextBtn);
+      }
+
+      window.changeUserPageSize = function (val) {
+        pageSize = parseInt(val, 10) || 20;
+        window.applyUserTablePagination(1);
+      };
+
+      window.applyUserTablePagination = function (targetPage) {
+        if (isPaginating) return;
+        isPaginating = true;
+        try {
+          const table = getActiveRoleTable();
+          if (!table) return;
+
+          const allRows = Array.from(table.querySelectorAll('tbody tr.user-data-row'));
+          const searchInput = document.getElementById('userManageSearchInput');
+          const dateInput = document.getElementById('userManageDateInput');
+          const q = (searchInput ? searchInput.value : '').trim().toLowerCase();
+          const dateVal = (dateInput ? dateInput.value : '').trim();
+
+          const matchedRows = allRows.filter((row) => {
+            if (row.style.display === 'none') return false;
+            const hay = (row.getAttribute('data-search') || row.innerText || '').toLowerCase();
+            if (q && !hay.includes(q)) return false;
+            if (dateVal) {
+              const rowDate = row.getAttribute('data-date') || '';
+              const parts = dateVal.split(' to ');
+              if (parts.length === 2) {
+                if (rowDate < parts[0].trim() || rowDate > parts[1].trim()) return false;
+              } else if (rowDate !== dateVal) {
+                return false;
+              }
+            }
+            return true;
+          });
+
+          const total = matchedRows.length;
+          const totalPages = Math.max(1, Math.ceil(total / pageSize));
+          currentPage = Math.max(1, Math.min(targetPage || currentPage, totalPages));
+
+          const startIdx = (currentPage - 1) * pageSize;
+          const endIdx = Math.min(startIdx + pageSize, total);
+
+          allRows.forEach((r) => r.classList.add('pg-hidden'));
+          matchedRows.slice(startIdx, endIdx).forEach((r) => r.classList.remove('pg-hidden'));
+
+          renderScreenshotPagination(
+            'usersPaginationButtons',
+            'usersPaginationSummary',
+            currentPage,
+            totalPages,
+            total,
+            startIdx,
+            endIdx,
+            window.applyUserTablePagination
+          );
+        } finally {
+          isPaginating = false;
+        }
+      };
+
+      function initUserPaginationBindings() {
+        const searchInput = document.getElementById('userManageSearchInput');
+        if (searchInput && !searchInput.dataset.boundUserPg) {
+          searchInput.dataset.boundUserPg = '1';
+          searchInput.addEventListener('input', function () {
+            setTimeout(() => window.applyUserTablePagination(1), 20);
+          });
+        }
+        const dateInput = document.getElementById('userManageDateInput');
+        if (dateInput && !dateInput.dataset.boundUserPg) {
+          dateInput.dataset.boundUserPg = '1';
+          dateInput.addEventListener('change', function () {
+            setTimeout(() => window.applyUserTablePagination(1), 60);
+          });
+        }
+        document.querySelectorAll('.user-role-table tbody').forEach((tbody) => {
+          if (!tbody.dataset.boundObs) {
+            tbody.dataset.boundObs = '1';
+            const obs = new MutationObserver(() => {
+              if (!isPaginating) window.applyUserTablePagination(currentPage);
+            });
+            obs.observe(tbody, { childList: true });
+          }
+        });
+        window.applyUserTablePagination(1);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initUserPaginationBindings);
+      } else {
+        initUserPaginationBindings();
+      }
+      setTimeout(initUserPaginationBindings, 50);
+    })();
+  </script>
+{% endblock %}

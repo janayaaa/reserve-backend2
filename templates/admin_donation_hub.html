@@ -1,0 +1,1111 @@
+{% extends 'base_admin.html' %}
+
+{% block title %}ReServe Admin - Donation Hub{% endblock %}
+
+{% block content %}
+  <style>
+    tr.pg-hidden { display: none !important; }
+  </style>
+
+  <!-- Page Header -->
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h2 class="text-2xl font-bold text-[#12372C] tracking-tight">Merchant Donation &amp; NGO Hub</h2>
+      <p class="text-xs text-[#4F695D] mt-0.5">Full oversight of Food Bank bulk appeals, merchant surplus donations, expiry windows, and off-app handoffs</p>
+    </div>
+    {% if selected_fb_id %}
+      <a href="/donations/" data-spa-link="true" class="bg-[#1B4D3E] text-white text-xs font-semibold px-4 py-2 rounded-xl shadow-xs hover:bg-[#12372C] transition-colors">
+        ✕ Clear Food Bank Filter (Showing FB-{{ selected_fb_id }})
+      </a>
+    {% endif %}
+  </div>
+
+  <!-- Mobile-Schema 5-Column KPI Cards -->
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+    <div class="bg-[#1B4D3E] border border-[#1B4D3E] p-4 rounded-2xl text-white shadow-xs flex items-center gap-3">
+      <div class="w-10 h-10 rounded-full bg-[#3A826D] flex items-center justify-center shrink-0">
+        <i data-lucide="building-2" class="w-4 h-4 text-white"></i>
+      </div>
+      <div>
+        <p class="text-[10px] text-white/80">Partner NGOs</p>
+        <h3 class="text-xl font-bold leading-tight mt-0.5">{{ total_hubs }}</h3>
+      </div>
+    </div>
+
+    <div class="bg-[#E7EEE9] border border-[#D5E3D9] p-4 rounded-2xl shadow-2xs flex items-center gap-3">
+      <div class="w-10 h-10 rounded-full bg-white text-[#1B4D3E] flex items-center justify-center shrink-0">
+        <i data-lucide="heart-handshake" class="w-4 h-4"></i>
+      </div>
+      <div>
+        <p class="text-[10px] text-[#4F695D]">Units Rescued</p>
+        <h3 class="text-xl font-bold text-[#1B4D3E] leading-tight mt-0.5">{{ total_donated }}</h3>
+      </div>
+    </div>
+
+    <div class="bg-white border border-[#DCE5DF] p-4 rounded-2xl shadow-2xs flex items-center gap-3">
+      <div class="w-10 h-10 rounded-full bg-[#FEF3C7] text-[#B45309] flex items-center justify-center shrink-0">
+        <i data-lucide="megaphone" class="w-4 h-4"></i>
+      </div>
+      <div>
+        <p class="text-[10px] text-[#4F695D]">Pending Appeals</p>
+        <h3 class="text-xl font-bold text-[#B45309] leading-tight mt-0.5">{{ pending_review_count }}</h3>
+      </div>
+    </div>
+
+    <div class="bg-white border border-[#DCE5DF] p-4 rounded-2xl shadow-2xs flex items-center gap-3">
+      <div class="w-10 h-10 rounded-full bg-[#E8EFEA] text-[#1B4D3E] flex items-center justify-center shrink-0">
+        <i data-lucide="truck" class="w-4 h-4"></i>
+      </div>
+      <div>
+        <p class="text-[10px] text-[#4F695D]">Available / Ongoing</p>
+        <h3 class="text-xl font-bold text-[#12372C] leading-tight mt-0.5">{{ ongoing_drops_count }}</h3>
+      </div>
+    </div>
+
+    <div class="bg-white border border-[#DCE5DF] p-4 rounded-2xl shadow-2xs flex items-center gap-3">
+      <div class="w-10 h-10 rounded-full bg-[#FBE4E1] text-[#B3261E] flex items-center justify-center shrink-0">
+        <i data-lucide="flag" class="w-4 h-4"></i>
+      </div>
+      <div>
+        <p class="text-[10px] text-[#4F695D]">Flagged / Closed</p>
+        <h3 class="text-xl font-bold text-[#B3261E] leading-tight mt-0.5">{{ flagged_drops_count }}</h3>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search & Filter Toolbar -->
+  <div class="bg-white p-3.5 rounded-2xl border border-[#DCE5DF] shadow-2xs">
+    <div class="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
+      <div class="flex items-center gap-2 bg-[#F7F9F7] px-3 py-2 rounded-xl border border-[#DCE5DF] text-xs flex-1">
+        <i data-lucide="calendar" class="w-4 h-4 text-[#1B4D3E] shrink-0"></i>
+        <span class="font-semibold text-[#12372C] shrink-0">Date Range:</span>
+        <input type="text" id="donationHubDateInput" class="date-range-picker w-full bg-transparent font-medium text-[#12372C] focus:outline-none text-xs" placeholder="Pick donation or appeal date range...">
+        <button onclick="clearCalendarFilter(); setTimeout(() => { window.applyAppealsPagination(1); window.applyDonationsPagination(1); }, 60);" class="text-[#4F695D] hover:text-[#B3261E] font-bold px-1" title="Clear Filter">✕</button>
+      </div>
+
+      <select id="donationHubSortSelect" onchange="triggerSortByCriteria(this); setTimeout(() => { window.applyAppealsPagination(1); window.applyDonationsPagination(1); }, 60);" class="px-3.5 py-2.5 bg-[#F7F9F7] text-[#12372C] border border-[#DCE5DF] rounded-xl text-xs font-semibold focus:outline-none focus:border-[#1B4D3E] cursor-pointer">
+        <option value="">Sort By...</option>
+        <option value="name-asc">Name / Title (A–Z)</option>
+        <option value="name-desc">Name / Title (Z–A)</option>
+        <option value="date-desc">Date (Newest)</option>
+        <option value="date-asc">Date (Oldest)</option>
+      </select>
+
+      <div class="relative flex-1">
+        <i data-lucide="search" class="w-4 h-4 text-[#4F695D] absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+        <input type="text" id="donationHubSearchInput" placeholder="Search batch ID, NGO hub, merchant, or food item..." class="w-full pl-10 pr-4 py-2.5 bg-[#F7F9F7] rounded-xl text-xs border border-[#DCE5DF] text-[#12372C] placeholder-[#4F695D]/70 focus:outline-none focus:border-[#1B4D3E] focus:bg-white transition-all">
+      </div>
+    </div>
+  </div>
+
+  <!-- Section View Tabs -->
+  <div class="flex gap-2 border-b border-[#DCE5DF] pb-1 overflow-x-auto">
+    <button onclick="filterDonationHubSection('all', this)" class="don-hub-tab px-5 py-2.5 text-xs font-black rounded-2xl bg-white text-[#1B4D3E] shadow-sm border-b-2 border-[#1B4D3E]">
+      All Activity ({{ appeals|length }} Appeals • {{ donations_list|length }} Donations)
+    </button>
+    <button onclick="filterDonationHubSection('appeals', this)" class="don-hub-tab px-5 py-2.5 text-xs font-bold rounded-2xl text-gray-500 hover:text-[#1B4D3E]">
+      Food Bank Appeals &amp; Bulk Requests ({{ appeals|length }})
+    </button>
+    <button onclick="filterDonationHubSection('donations', this)" class="don-hub-tab px-5 py-2.5 text-xs font-bold rounded-2xl text-gray-500 hover:text-[#1B4D3E]">
+      Merchant Posted Surplus Donations ({{ donations_list|length }})
+    </button>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- TABLE 1: FOOD BANK DONATION APPEALS & BULK REQUESTS (20 ROWS/PAGE)        -->
+  <!-- ========================================================================= -->
+  <div id="section-appeals" class="space-y-3">
+    <div class="flex justify-between items-center">
+      <div>
+        <h4 class="font-bold text-[#12372C] text-sm">Food Bank Donation Appeals &amp; Bulk Requests</h4>
+        <p class="text-[11px] text-[#4F695D]">Single and multi-item requests submitted by Food Banks to Partner Merchants (Pending → Ongoing → Successful)</p>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-2xs border border-[#DCE5DF] overflow-hidden">
+      <div class="overflow-x-auto">
+        <table id="appealsTable" class="user-role-table w-full text-left text-xs min-w-[780px]">
+          <thead class="bg-[#F3F6F4] text-[#12372C] font-semibold uppercase tracking-wider text-[10px] border-b border-[#DCE5DF]">
+            <tr>
+              <th class="p-3.5">Batch / Req ID</th>
+              <th class="p-3.5">Requested Items &amp; Photo</th>
+              <th class="p-3.5">Food Bank Hub</th>
+              <th class="p-3.5">Target Merchant</th>
+              <th class="p-3.5">Total Qty</th>
+              <th class="p-3.5">Expiry Date &amp; Time</th>
+              <th class="p-3.5">Status</th>
+              <th class="p-3.5">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[#DCE5DF]">
+            {% for req in appeals %}
+            <tr id="appeal-row-{{ req.batch_code }}"
+                class="hover:bg-[#F7F9F7] transition-colors appeal-data-row"
+                data-date="{{ req.date }}"
+                data-search="{{ req.batch_code|lower }} {{ req.food_bank_name|lower }} {{ req.merchant_name|lower }} {{ req.title|lower }} {{ req.reason|lower }}">
+              <td class="p-3.5 font-mono font-semibold text-[#1B4D3E]">{{ req.batch_code }}</td>
+              <td class="p-3.5">
+                <div class="flex items-center gap-3">
+                  <img src="{{ req.image_url }}"
+                       onerror="this.src='https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=200&q=80'"
+                       class="w-10 h-10 rounded-xl object-cover border border-[#DCE5DF] shrink-0 bg-[#F7F9F7]"
+                       alt="{{ req.title }}">
+                  <div class="max-w-[210px]">
+                    <span class="font-semibold text-[#12372C] block truncate">{{ req.title }}</span>
+                    <span class="text-[10px] text-[#4F695D] block truncate">Reason: "{{ req.reason }}"</span>
+                  </div>
+                </div>
+              </td>
+              <td class="p-3.5">
+                <span class="font-semibold text-[#12372C] block">{{ req.food_bank_name }}</span>
+                <span class="text-[10px] text-[#4F695D]">{{ req.food_bank_contact }}</span>
+              </td>
+              <td class="p-3.5">
+                <span class="font-semibold text-[#1B4D3E] block">{{ req.merchant_name }}</span>
+                <span class="text-[10px] text-[#4F695D]">{{ req.merchant_contact }}</span>
+              </td>
+              <td class="p-3.5 font-bold text-[#12372C]">{{ req.total_qty }} {{ req.unit_name }}</td>
+              <td class="p-3.5 text-[#A94A3A] font-medium">{{ req.expiry_display }}</td>
+              <td class="p-3.5">
+                {% if req.status == 'Pending' or req.status == 'Active' %}
+                  <span class="bg-[#FEF3C7] text-[#B45309] px-2.5 py-1 rounded-lg text-[10px] font-semibold">Pending</span>
+                {% elif req.status == 'Ongoing' %}
+                  <span class="bg-[#E1EEF8] text-[#2C5F8A] px-2.5 py-1 rounded-lg text-[10px] font-semibold">Ongoing</span>
+                {% elif req.status == 'Successful' or req.status == 'Fulfilled' %}
+                  <span class="bg-[#E4F0E8] text-[#1F6B52] px-2.5 py-1 rounded-lg text-[10px] font-semibold">Successful</span>
+                {% else %}
+                  <span class="bg-[#FBE4E1] text-[#B3261E] px-2.5 py-1 rounded-lg text-[10px] font-semibold">{{ req.status }}</span>
+                {% endif %}
+              </td>
+              <td class="p-3.5">
+                <div class="flex items-center gap-2">
+                  <button type="button"
+                          onclick="window.openAdminAppealModal(this)"
+                          data-raw-id="{{ req.raw_id }}"
+                          data-batch="{{ req.batch_code }}"
+                          data-title="{{ req.title }}"
+                          data-fb="{{ req.food_bank_name }}"
+                          data-fb-contact="{{ req.food_bank_contact }}"
+                          data-fb-email="{{ req.food_bank_email }}"
+                          data-fb-addr="{{ req.food_bank_address }}"
+                          data-merchant="{{ req.merchant_name }}"
+                          data-merchant-contact="{{ req.merchant_contact }}"
+                          data-merchant-addr="{{ req.merchant_address }}"
+                          data-qty="{{ req.total_qty }}"
+                          data-unit="{{ req.unit_name }}"
+                          data-img="{{ req.image_url }}"
+                          data-reason="{{ req.reason }}"
+                          data-info="{{ req.additional_info }}"
+                          data-expiry="{{ req.expiry_display }}"
+                          data-date="{{ req.date }}"
+                          data-status="{{ req.status }}"
+                          data-items="{{ req.items_json }}"
+                          class="w-8 h-8 rounded-lg bg-[#F7F9F7] hover:bg-[#E8EFEA] border border-[#DCE5DF] text-[#1B4D3E] flex items-center justify-center transition-colors cursor-pointer"
+                          title="Inspect Appeal Summary">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </button>
+                  {% if req.status == 'Pending' or req.status == 'Active' %}
+                  <button type="button"
+                          onclick="handleAdminDonationHubAction('appeal', 'approve', '{{ req.raw_id }}', '{{ req.batch_code }}')"
+                          class="w-8 h-8 rounded-lg bg-[#E8EFEA] hover:bg-[#3A826D] text-[#1B4D3E] hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                          title="Approve Appeal (Set Ongoing)">
+                    <i data-lucide="check" class="w-4 h-4"></i>
+                  </button>
+                  {% endif %}
+                  {% if req.status == 'Ongoing' %}
+                  <button type="button"
+                          onclick="handleAdminDonationHubAction('appeal', 'complete', '{{ req.raw_id }}', '{{ req.batch_code }}')"
+                          class="w-8 h-8 rounded-lg bg-[#E4F0E8] hover:bg-[#3A826D] text-[#1F6B52] hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                          title="Mark Handshake Successful">
+                    <i data-lucide="check-check" class="w-4 h-4"></i>
+                  </button>
+                  {% endif %}
+                  <button type="button"
+                          onclick="handleAdminDonationHubAction('appeal', 'reject', '{{ req.raw_id }}', '{{ req.batch_code }}')"
+                          class="w-8 h-8 rounded-lg bg-[#FDF3F2] hover:bg-[#FBE4E1] border border-[#E5B8B4] text-[#B3261E] flex items-center justify-center transition-colors cursor-pointer"
+                          title="Reject Appeal">
+                    <i data-lucide="x-circle" class="w-4 h-4"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            {% empty %}
+            <tr class="empty-row"><td colspan="8" class="p-8 text-center text-[#4F695D] text-xs">No Food Bank appeals or bulk requests recorded yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- SCREENSHOT-MATCHED 20-ROW PAGINATION FOOTER (APPEALS) -->
+      <div id="appealsPaginationBar" class="px-5 py-4 bg-white border-t border-[#E5E7EB]">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div id="appealsPaginationButtons" class="flex items-center gap-1.5 flex-wrap"></div>
+          <div class="flex items-center gap-2.5">
+            <span class="text-xs font-medium text-gray-700">Result per page</span>
+            <select id="appealsPageSizeSelect" onchange="window.changeAppealsPageSize(this.value)" class="h-9 px-3 rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-800 focus:outline-none focus:border-gray-400 cursor-pointer">
+              <option value="20" selected>20</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </div>
+        </div>
+        <div id="appealsPaginationSummary" class="mt-2.5 text-xs font-medium text-gray-600">0-0 of 0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- TABLE 2: MERCHANT POSTED SURPLUS DONATIONS (20 ROWS/PAGE)                 -->
+  <!-- ========================================================================= -->
+  <div id="section-donations" class="space-y-3">
+    <div class="flex justify-between items-center">
+      <div>
+        <h4 class="font-bold text-[#12372C] text-sm">Merchant Posted Surplus Donations &amp; Active Dispatches</h4>
+        <p class="text-[11px] text-[#4F695D]">Multi-listing surplus inventory posted by Merchants for Food Banks within 10km (Available → Ongoing → Successful)</p>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-2xs border border-[#DCE5DF] overflow-hidden">
+      <div class="overflow-x-auto">
+        <table id="donationsTable" class="user-role-table w-full text-left text-xs min-w-[780px]">
+          <thead class="bg-[#F3F6F4] text-[#12372C] font-semibold uppercase tracking-wider text-[10px] border-b border-[#DCE5DF]">
+            <tr>
+              <th class="p-3.5">Donation ID</th>
+              <th class="p-3.5">Food Item &amp; Photo</th>
+              <th class="p-3.5">Donor Merchant</th>
+              <th class="p-3.5">Claimant Food Bank</th>
+              <th class="p-3.5">Quantity</th>
+              <th class="p-3.5">Expiry Date &amp; Time</th>
+              <th class="p-3.5">Status</th>
+              <th class="p-3.5">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[#DCE5DF]">
+            {% for tx in donations_list %}
+            <tr id="don-row-{{ tx.id }}"
+                class="hover:bg-[#F7F9F7] transition-colors donation-data-row"
+                data-date="{{ tx.date }}"
+                data-search="{{ tx.id|lower }} {{ tx.food_name|lower }} {{ tx.merchant_name|lower }} {{ tx.food_bank_name|lower }}">
+              <td class="p-3.5 font-mono font-semibold text-[#1B4D3E]">{{ tx.id }}</td>
+              <td class="p-3.5">
+                <div class="flex items-center gap-3">
+                  <img src="{{ tx.image_url }}"
+                       onerror="this.src='https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=200&q=80'"
+                       class="w-10 h-10 rounded-xl object-cover border border-[#DCE5DF] shrink-0 bg-[#F7F9F7]"
+                       alt="{{ tx.food_name }}">
+                  <div>
+                    <span class="font-semibold text-[#12372C] block">{{ tx.food_name }}</span>
+                    <span class="text-[10px] text-[#4F695D]">{{ tx.food_type }} {% if tx.is_ttt %}• ⚡ TTT Auto{% endif %}</span>
+                  </div>
+                </div>
+              </td>
+              <td class="p-3.5">
+                <span class="font-semibold text-[#1B4D3E] block">{{ tx.merchant_name }}</span>
+                <span class="text-[10px] text-[#4F695D]">{{ tx.merchant_contact }}</span>
+              </td>
+              <td class="p-3.5">
+                <span class="font-semibold text-[#12372C] block">{{ tx.food_bank_name }}</span>
+                <span class="text-[10px] text-[#4F695D]">{{ tx.food_bank_contact }}</span>
+              </td>
+              <td class="p-3.5 font-bold text-[#12372C]">{{ tx.amount }}</td>
+              <td class="p-3.5 text-[#A94A3A] font-medium">{{ tx.expiry_display }}</td>
+              <td class="p-3.5">
+                {% if 'flag' in tx.status|lower or 'cancel' in tx.status|lower or 'declin' in tx.status|lower %}
+                  <span class="bg-[#FBE4E1] text-[#B3261E] px-2.5 py-1 rounded-lg text-[10px] font-semibold">{{ tx.status }}</span>
+                {% elif 'success' in tx.status|lower or 'complet' in tx.status|lower or 'deliver' in tx.status|lower %}
+                  <span class="bg-[#E4F0E8] text-[#1F6B52] px-2.5 py-1 rounded-lg text-[10px] font-semibold">Successful</span>
+                {% elif 'ongoing' in tx.status|lower or 'claim' in tx.status|lower %}
+                  <span class="bg-[#E1EEF8] text-[#2C5F8A] px-2.5 py-1 rounded-lg text-[10px] font-semibold">Ongoing</span>
+                {% else %}
+                  <span class="bg-[#E4F0E8] text-[#1F6B52] px-2.5 py-1 rounded-lg text-[10px] font-semibold">Available</span>
+                {% endif %}
+              </td>
+              <td class="p-3.5">
+                <div class="flex items-center gap-2">
+                  <button type="button"
+                          onclick="openAdminDonationModal(this)"
+                          data-raw-id="{{ tx.raw_id }}"
+                          data-id="{{ tx.id }}"
+                          data-title="{{ tx.food_name }}"
+                          data-type="{{ tx.food_type }}"
+                          data-desc="{{ tx.description }}"
+                          data-qty="{{ tx.amount }}"
+                          data-merchant="{{ tx.merchant_name }}"
+                          data-merchant-contact="{{ tx.merchant_contact }}"
+                          data-merchant-addr="{{ tx.merchant_address }}"
+                          data-fb="{{ tx.food_bank_name }}"
+                          data-fb-contact="{{ tx.food_bank_contact }}"
+                          data-fb-addr="{{ tx.food_bank_address }}"
+                          data-expiry="{{ tx.expiry_display }}"
+                          data-date="{{ tx.date }}"
+                          data-status="{{ tx.status }}"
+                          data-img="{{ tx.image_url }}"
+                          class="w-8 h-8 rounded-lg bg-[#F7F9F7] hover:bg-[#E8EFEA] border border-[#DCE5DF] text-[#1B4D3E] flex items-center justify-center transition-colors cursor-pointer"
+                          title="View Donation Details">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </button>
+                  <button type="button"
+                          onclick="handleAdminDonationHubAction('donation', 'complete', '{{ tx.raw_id }}', '')"
+                          class="w-8 h-8 rounded-lg bg-[#E4F0E8] hover:bg-[#3A826D] text-[#1F6B52] hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                          title="Mark Handshake Successful">
+                    <i data-lucide="check-check" class="w-4 h-4"></i>
+                  </button>
+                  <button type="button"
+                          onclick="handleAdminDonationHubAction('donation', 'flag', '{{ tx.raw_id }}', '')"
+                          class="w-8 h-8 rounded-lg bg-[#FEF3C7] hover:bg-amber-200 text-[#B45309] flex items-center justify-center transition-colors cursor-pointer"
+                          title="Flag Donation">
+                    <i data-lucide="flag" class="w-4 h-4"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            {% empty %}
+            <tr class="empty-row"><td colspan="8" class="p-8 text-center text-[#4F695D] text-xs">No surplus donations posted by merchants yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- SCREENSHOT-MATCHED 20-ROW PAGINATION FOOTER (DONATIONS) -->
+      <div id="donationsPaginationBar" class="px-5 py-4 bg-white border-t border-[#E5E7EB]">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div id="donationsPaginationButtons" class="flex items-center gap-1.5 flex-wrap"></div>
+          <div class="flex items-center gap-2.5">
+            <span class="text-xs font-medium text-gray-700">Result per page</span>
+            <select id="donationsPageSizeSelect" onchange="window.changeDonationsPageSize(this.value)" class="h-9 px-3 rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-800 focus:outline-none focus:border-gray-400 cursor-pointer">
+              <option value="20" selected>20</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </div>
+        </div>
+        <div id="donationsPaginationSummary" class="mt-2.5 text-xs font-medium text-gray-600">0-0 of 0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- CLICKABLE FOOD BANK / NGO PARTNER PROFILES DIRECTORY                      -->
+  <!-- ========================================================================= -->
+  <div class="bg-white p-5 rounded-2xl border border-[#DCE5DF] shadow-2xs space-y-4">
+    <div class="flex items-center justify-between border-b border-[#DCE5DF] pb-3">
+      <div>
+        <h3 class="text-sm font-bold text-[#12372C]">Partner Food Bank &amp; NGO Profiles</h3>
+        <p class="text-[11px] text-[#4F695D]">Click any Food Bank card to inspect their accreditation, contact details, active appeals, and received donation history</p>
+      </div>
+      {% if foodbank_profiles|length > 4 %}
+      <button type="button" id="toggleAllFoodBanksBtn" onclick="toggleSeeAllFoodBanks()" class="bg-[#E8EFEA] hover:bg-[#1B4D3E] text-[#1B4D3E] hover:text-white font-semibold text-xs px-4 py-2 rounded-xl transition-all">
+        See All ({{ foodbank_profiles|length }})
+      </button>
+      {% endif %}
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      {% for fp in foodbank_profiles %}
+      <div id="foodbank-profile-card-{{ fp.org_id }}"
+           onclick="window.openFoodBankDirectoryProfile(this)"
+           data-id="{{ fp.org_id }}"
+           data-id-label="{{ fp.id_label }}"
+           data-name="{{ fp.org_name }}"
+           data-address="{{ fp.address }}"
+           data-contact="{{ fp.contact_person }}"
+           data-phone="{{ fp.phone }}"
+           data-hotline="{{ fp.hotline }}"
+           data-email="{{ fp.email }}"
+           data-status="{{ fp.status }}"
+           data-received="{{ fp.total_received }}"
+           data-active-req="{{ fp.active_req_count }}"
+           data-claimed-don="{{ fp.claimed_don_count }}"
+           data-permit="{{ fp.permit_url }}"
+           data-date="{{ fp.date }}"
+           data-history="{{ fp.history_json }}"
+           class="fb-dir-card {% if forloop.counter > 4 %}hidden extra-fb-card{% endif %} cursor-pointer group bg-[#F7F9F7] hover:bg-[#E8EFEA]/70 border border-[#DCE5DF] hover:border-[#3A826D] rounded-xl p-4 transition-all flex flex-col justify-between gap-3">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-10 h-10 rounded-xl bg-[#1B4D3E] text-white flex items-center justify-center font-bold text-sm shrink-0">
+              {{ fp.org_name|slice:":1"|upper }}
+            </div>
+            <div class="min-w-0">
+              <h4 class="font-semibold text-[#12372C] text-xs truncate group-hover:text-[#1B4D3E]">{{ fp.org_name }}</h4>
+              <p class="text-[10px] text-[#4F695D]">{{ fp.id_label }} • {{ fp.contact_person }}</p>
+              <p class="text-[10px] font-semibold text-[#3A826D] mt-0.5">{{ fp.total_received }} Units Rescued</p>
+            </div>
+          </div>
+          <span class="px-2 py-0.5 rounded-md text-[9px] font-semibold uppercase {% if fp.status == 'Active' %}bg-[#E4F0E8] text-[#1F6B52]{% else %}bg-[#FEF3C7] text-[#B45309]{% endif %}">
+            {{ fp.status }}
+          </span>
+        </div>
+
+        <div class="flex items-center justify-between pt-2.5 border-t border-[#DCE5DF] text-[10px] font-medium">
+          <span class="text-[#B45309] bg-[#FEF3C7] px-2.5 py-1 rounded-lg">
+            {{ fp.active_req_count }} Active Appeal{{ fp.active_req_count|pluralize }}
+          </span>
+          <span class="text-[#1F6B52]">
+            {{ fp.claimed_don_count }} Claimed
+          </span>
+        </div>
+      </div>
+      {% empty %}
+      <p class="text-xs text-[#4F695D] col-span-full py-4 text-center">No Food Bank partners registered yet.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL 1: FOOD BANK APPEAL / BULK REQUEST FULL SUMMARY MODAL (STICKY)      -->
+  <!-- ========================================================================= -->
+  <div id="adminAppealDetailModal" class="modal-overlay hidden fixed inset-0 bg-[#12372C]/60 backdrop-blur-xs flex justify-center items-center z-50 p-4">
+    <div class="bg-[#F4F8F6] rounded-2xl w-full max-w-[760px] max-h-[92vh] overflow-y-auto shadow-2xl border border-[#DCE5DF] flex flex-col justify-between relative">
+      <div class="sticky top-0 z-30 bg-white px-6 py-4 border-b border-[#DCE5DF] flex justify-between items-center">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-[#FEF3C7] text-[#B45309] flex items-center justify-center">
+            <i data-lucide="megaphone" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 id="apModalBatch" class="font-bold text-[#12372C] text-base">Appeal BREQ</h3>
+            <p id="apModalSub" class="text-[11px] text-[#4F695D]">Food Bank Bulk / Single Appeal Summary</p>
+          </div>
+        </div>
+        <button onclick="closeModal('adminAppealDetailModal')" class="w-8 h-8 rounded-full bg-[#F4F8F6] hover:bg-[#E8EFEA] text-[#12372C] border border-[#DCE5DF] flex items-center justify-center font-bold text-xs cursor-pointer">✕</button>
+      </div>
+
+      <div class="p-5 space-y-4 text-xs">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-1">
+            <span class="text-[10px] font-semibold uppercase text-[#4F695D]">Requesting Food Bank Hub</span>
+            <p class="font-bold text-[#12372C] text-sm" id="apModalFbName">...</p>
+            <p class="font-medium text-[#12372C]" id="apModalFbContact">...</p>
+            <p class="font-medium text-[#3A826D]" id="apModalFbEmail">...</p>
+            <p class="text-[#4F695D] text-[11px]" id="apModalFbAddr">...</p>
+          </div>
+
+          <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-1">
+            <span class="text-[10px] font-semibold uppercase text-[#4F695D]">Target Donor Merchant</span>
+            <p class="font-bold text-[#1B4D3E] text-sm" id="apModalMerchName">...</p>
+            <p class="font-medium text-[#12372C]" id="apModalMerchContact">...</p>
+            <p class="text-[#4F695D] text-[11px]" id="apModalMerchAddr">...</p>
+            <p class="text-[#B3261E] font-semibold text-[11px] pt-1">Expiry Window: <span id="apModalExpiry">...</span></p>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-2">
+          <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider border-b border-[#DCE5DF] pb-1.5">Beneficiary Reason &amp; Logistics</h4>
+          <p class="text-[#12372C]"><strong>Reason:</strong> <span id="apModalReason">...</span></p>
+          <p class="text-[#4F695D]"><strong>Additional Info:</strong> <span id="apModalInfo">...</span></p>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-2">
+          <div class="flex items-center justify-between border-b border-[#DCE5DF] pb-1.5">
+            <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider">Requested Items Breakdown</h4>
+            <span id="apModalItemsCountBadge" class="bg-[#E8EFEA] text-[#1B4D3E] px-2.5 py-0.5 rounded-md text-[10px] font-bold">1 Item</span>
+          </div>
+          <div id="apModalItemsContainer" class="space-y-2"></div>
+        </div>
+      </div>
+
+      <div class="px-6 py-3.5 bg-white border-t border-[#DCE5DF] flex flex-wrap justify-between items-center gap-3">
+        <button id="apModalRejectBtn" class="bg-[#FDF3F2] hover:bg-[#FBE4E1] text-[#B3261E] border border-[#E5B8B4] font-semibold text-xs px-5 py-2.5 rounded-xl transition-colors cursor-pointer">
+          Reject Appeal
+        </button>
+        <div class="flex items-center gap-2">
+          <button id="apModalApproveBtn" class="bg-[#1B4D3E] hover:bg-[#12372C] text-white font-semibold text-xs px-5 py-2.5 rounded-xl transition-colors cursor-pointer">
+            Approve (Set Ongoing)
+          </button>
+          <button id="apModalCompleteBtn" class="bg-[#3A826D] hover:bg-[#1B4D3E] text-white font-semibold text-xs px-6 py-2.5 rounded-xl transition-colors cursor-pointer">
+            Mark Handshake Successful
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL 2: MERCHANT POSTED SURPLUS DONATION DETAIL MODAL (STICKY HEADER)    -->
+  <!-- ========================================================================= -->
+  <div id="adminDonationDetailModal" class="modal-overlay hidden fixed inset-0 bg-[#12372C]/60 backdrop-blur-xs flex justify-center items-center z-50 p-4">
+    <div class="bg-[#F4F8F6] rounded-2xl w-full max-w-[720px] max-h-[92vh] overflow-y-auto shadow-2xl border border-[#DCE5DF] flex flex-col justify-between relative">
+      <div class="sticky top-0 z-30 bg-white px-6 py-4 border-b border-[#DCE5DF] flex justify-between items-center">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-[#E8EFEA] flex items-center justify-center text-[#1B4D3E] font-bold text-xs">DON</div>
+          <div>
+            <h3 id="donModalTitle" class="font-bold text-[#12372C] text-base">Donation Details</h3>
+            <p id="donModalSub" class="text-[11px] text-[#4F695D]">Merchant Posted Surplus Allotment</p>
+          </div>
+        </div>
+        <button onclick="closeModal('adminDonationDetailModal')" class="w-8 h-8 rounded-full bg-[#F4F8F6] hover:bg-[#E8EFEA] text-[#12372C] border border-[#DCE5DF] flex items-center justify-center font-bold text-xs cursor-pointer">✕</button>
+      </div>
+
+      <div class="p-5 space-y-4 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center bg-white p-4 rounded-xl border border-[#DCE5DF]">
+          <div class="sm:col-span-4 h-36 rounded-xl overflow-hidden bg-[#F7F9F7] border border-[#DCE5DF]">
+            <img id="donModalImg" src="https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=400&q=80" class="w-full h-full object-cover" alt="Donation Photo">
+          </div>
+          <div class="sm:col-span-8 space-y-1.5">
+            <h4 class="font-bold text-sm text-[#12372C]" id="donModalFoodName">...</h4>
+            <p class="text-[#4F695D]" id="donModalDesc">...</p>
+            <p><strong>Quantity Donated:</strong> <span id="donModalQty" class="font-bold text-[#1B4D3E]">...</span></p>
+            <p><strong>Expiry Date &amp; Time:</strong> <span id="donModalExpiry" class="font-semibold text-[#B3261E]">...</span></p>
+            <p><strong>Date Posted:</strong> <span id="donModalDate" class="text-[#4F695D]">...</span></p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-1">
+            <span class="text-[10px] font-semibold uppercase text-[#4F695D]">Donor Establishment</span>
+            <p class="font-bold text-[#1B4D3E] text-sm" id="donModalMerchant">...</p>
+            <p class="font-medium text-[#12372C]" id="donModalMerchantContact">...</p>
+            <p class="text-[#4F695D] text-[11px]" id="donModalMerchantAddr">...</p>
+          </div>
+          <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-1">
+            <span class="text-[10px] font-semibold uppercase text-[#4F695D]">Claimant Food Bank Hub</span>
+            <p class="font-bold text-[#12372C] text-sm" id="donModalFb">...</p>
+            <p class="font-medium text-[#12372C]" id="donModalFbContact">...</p>
+            <p class="text-[#4F695D] text-[11px]" id="donModalFbAddr">...</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-6 py-3.5 bg-white border-t border-[#DCE5DF] flex flex-wrap justify-between items-center gap-3">
+        <div class="flex items-center gap-2">
+          <button id="donModalFlagBtn" class="bg-[#FEF3C7] hover:bg-amber-200 text-[#B45309] font-semibold text-xs px-4 py-2.5 rounded-xl border border-amber-300 transition-colors cursor-pointer">
+            Flag Issue
+          </button>
+          <button id="donModalCancelBtn" class="bg-[#FDF3F2] hover:bg-[#FBE4E1] text-[#B3261E] border border-[#E5B8B4] font-semibold text-xs px-4 py-2.5 rounded-xl transition-colors cursor-pointer">
+            Cancel &amp; Restore Stock
+          </button>
+        </div>
+        <button id="donModalCompleteBtn" class="bg-[#3A826D] hover:bg-[#1B4D3E] text-white font-semibold text-xs px-6 py-2.5 rounded-xl transition-colors cursor-pointer">
+          Confirm Handshake Successful
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL 3: PARTNER FOOD BANK FULL PROFILE & HISTORY MODAL (STICKY HEADER)   -->
+  <!-- ========================================================================= -->
+  <div id="foodBankDirectoryProfileModal" class="modal-overlay hidden fixed inset-0 bg-[#12372C]/60 backdrop-blur-xs flex justify-center items-center z-50 p-4">
+    <div class="bg-[#F4F8F6] rounded-2xl w-full max-w-[880px] max-h-[92vh] overflow-y-auto shadow-2xl border border-[#DCE5DF] flex flex-col justify-between relative">
+      <div class="sticky top-0 z-30 bg-white px-6 py-4 border-b border-[#DCE5DF] flex justify-between items-center">
+        <div class="flex items-center gap-3">
+          <div class="w-11 h-11 rounded-xl bg-[#1B4D3E] text-white flex items-center justify-center font-bold text-lg" id="fbDirInitial">F</div>
+          <div>
+            <h3 id="fbDirName" class="font-bold text-[#12372C] text-base">Food Bank Name</h3>
+            <p id="fbDirSub" class="text-[11px] text-[#4F695D]">FB-1 • Verified NGO Partner</p>
+          </div>
+        </div>
+        <button onclick="closeModal('foodBankDirectoryProfileModal')" class="w-8 h-8 rounded-full bg-[#F4F8F6] hover:bg-[#E8EFEA] text-[#12372C] border border-[#DCE5DF] flex items-center justify-center font-bold text-xs cursor-pointer">✕</button>
+      </div>
+
+      <div class="p-5 space-y-4 text-xs">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+          <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-1">
+            <span class="text-[10px] font-semibold uppercase text-[#4F695D]">Coordinator &amp; Contact</span>
+            <p class="font-semibold text-[#12372C]" id="fbDirContact">...</p>
+            <p class="text-[#4F695D]" id="fbDirPhone">...</p>
+            <p class="text-[#3A826D] font-medium" id="fbDirEmail">...</p>
+            <p class="text-[#4F695D] text-[11px]" id="fbDirAddress">...</p>
+          </div>
+          <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-1.5">
+            <span class="text-[10px] font-semibold uppercase text-[#4F695D]">Impact &amp; Accreditation</span>
+            <p class="font-bold text-[#1B4D3E] text-sm">Total Rescued: <span id="fbDirReceived">0</span> Units</p>
+            <p class="text-[#4F695D]">Registered: <strong class="text-[#12372C]" id="fbDirDate">...</strong></p>
+            <button id="fbDirPermitBtn" class="mt-1 bg-[#E8EFEA] hover:bg-[#3A826D] text-[#1B4D3E] hover:text-white font-semibold text-xs py-2 px-3 rounded-xl w-full transition-colors cursor-pointer">
+              Inspect Accreditation Certificate
+            </button>
+          </div>
+          <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] flex flex-col justify-between">
+            <div>
+              <span class="text-[10px] font-semibold uppercase text-[#4F695D]">Activity Summary</span>
+              <p class="font-bold text-[#B45309] text-sm mt-1"><span id="fbDirActiveReq">0</span> Active Appeals</p>
+              <p class="font-medium text-[#1F6B52] text-xs"><span id="fbDirClaimedDon">0</span> Claimed Donations</p>
+            </div>
+            <button id="fbDirFilterBtn" class="mt-2 bg-[#3A826D] hover:bg-[#1B4D3E] text-white font-semibold text-xs py-2 px-3 rounded-xl transition-colors cursor-pointer">
+              Filter Hub by This Food Bank
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-3">
+          <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider">Recent Appeals &amp; Received Donations</h4>
+          <div class="overflow-x-auto rounded-xl border border-[#DCE5DF]">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-[#F3F6F4] text-[#12372C] text-[10px] font-semibold uppercase border-b border-[#DCE5DF]">
+                <tr>
+                  <th class="p-2.5">Record ID</th>
+                  <th class="p-2.5">Type</th>
+                  <th class="p-2.5">Food Item &amp; Qty</th>
+                  <th class="p-2.5">Merchant</th>
+                  <th class="p-2.5">Date</th>
+                  <th class="p-2.5">Status</th>
+                </tr>
+              </thead>
+              <tbody id="fbDirHistoryBody" class="divide-y divide-[#DCE5DF]"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-6 py-3.5 bg-white border-t border-[#DCE5DF] flex justify-end">
+        <button onclick="closeModal('foodBankDirectoryProfileModal')" class="bg-[#1B4D3E] hover:bg-[#12372C] text-white font-semibold text-xs px-7 py-2.5 rounded-xl transition-colors cursor-pointer">
+          Close Profile
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SELF-CONTAINED MODAL HANDLERS + IMMEDIATE DUAL 20-ROW SCREENSHOT PAGINATION -->
+  <script>
+    (function () {
+      let appealsPage = 1;
+      let appealsPageSize = 20;
+      let donationsPage = 1;
+      let donationsPageSize = 20;
+      let isPaginatingAppeals = false;
+      let isPaginatingDonations = false;
+
+      function parseDatasetJson(rawStr) {
+        if (!rawStr) return [];
+        try {
+          return JSON.parse(rawStr);
+        } catch (e1) {
+          try {
+            const unescaped = rawStr.replace(/\\u([0-9a-fA-F]{4})/g, function (_, hex) {
+              return String.fromCharCode(parseInt(hex, 16));
+            });
+            return JSON.parse(unescaped);
+          } catch (e2) {
+            return [];
+          }
+        }
+      }
+
+      function renderStatusPillHtml(statusStr) {
+        const s = (statusStr || 'Pending').toLowerCase();
+        if (s.includes('reject') || s.includes('cancel') || s.includes('withdrawn') || s.includes('flag')) {
+          return `<span class="bg-[#FBE4E1] text-[#B3261E] px-2.5 py-1 rounded-lg text-[10px] font-semibold">${statusStr}</span>`;
+        }
+        if (s.includes('ongoing') || s.includes('claim')) {
+          return `<span class="bg-[#E1EEF8] text-[#2C5F8A] px-2.5 py-1 rounded-lg text-[10px] font-semibold">${statusStr}</span>`;
+        }
+        if (s.includes('pend') || s.includes('active')) {
+          return `<span class="bg-[#FEF3C7] text-[#B45309] px-2.5 py-1 rounded-lg text-[10px] font-semibold">${statusStr}</span>`;
+        }
+        return `<span class="bg-[#E4F0E8] text-[#1F6B52] px-2.5 py-1 rounded-lg text-[10px] font-semibold">${statusStr}</span>`;
+      }
+
+      window.openAdminAppealModal = function (btn) {
+        if (!btn) return;
+        const rawId = btn.getAttribute('data-raw-id') || '';
+        const batchCode = btn.getAttribute('data-batch') || `REQ-${rawId}`;
+
+        const setText = (id, val) => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = val;
+        };
+
+        setText('apModalBatch', `Appeal ${batchCode} — ${btn.getAttribute('data-fb') || 'Food Bank'}`);
+        setText('apModalSub', `Status: ${btn.getAttribute('data-status') || 'Pending'} • Posted ${btn.getAttribute('data-date') || 'N/A'}`);
+        setText('apModalFbName', btn.getAttribute('data-fb') || 'Partner Food Bank');
+        setText('apModalFbContact', btn.getAttribute('data-fb-contact') || 'Coordinator');
+        setText('apModalFbEmail', btn.getAttribute('data-fb-email') || '');
+        setText('apModalFbAddr', btn.getAttribute('data-fb-addr') || 'Cebu City');
+
+        setText('apModalMerchName', btn.getAttribute('data-merchant') || 'Partner Merchant');
+        setText('apModalMerchContact', btn.getAttribute('data-merchant-contact') || 'Store Manager');
+        setText('apModalMerchAddr', btn.getAttribute('data-merchant-addr') || 'Cebu City');
+        setText('apModalExpiry', btn.getAttribute('data-expiry') || 'Standard Window');
+        setText('apModalReason', btn.getAttribute('data-reason') || 'Community food relief distribution');
+        setText('apModalInfo', btn.getAttribute('data-info') || 'Standard pickup coordination');
+
+        let items = parseDatasetJson(btn.getAttribute('data-items'));
+        if (!Array.isArray(items) || items.length === 0) {
+          items = [
+            {
+              donation_req_id: rawId || 1,
+              food_name: btn.getAttribute('data-title') || 'Requested Surplus Item',
+              food_type: 'Surplus Inventory',
+              qty_needed: btn.getAttribute('data-qty') || 1,
+              qty_available: btn.getAttribute('data-qty') || 1,
+              unit_name: btn.getAttribute('data-unit') || 'items',
+              expiry_display: btn.getAttribute('data-expiry') || 'Standard Window',
+              image_url:
+                btn.getAttribute('data-img') ||
+                'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=200&q=80',
+              status: btn.getAttribute('data-status') || 'Pending',
+            },
+          ];
+        }
+
+        const countBadge = document.getElementById('apModalItemsCountBadge');
+        if (countBadge) {
+          countBadge.textContent = `${items.length} Item${items.length === 1 ? '' : 's'}`;
+        }
+
+        const container = document.getElementById('apModalItemsContainer');
+        if (container) {
+          container.innerHTML = items
+            .map((it) => {
+              const imgUrl =
+                it.image_url ||
+                'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=200&q=80';
+              const reqIdLabel = it.donation_req_id ? `REQ-${it.donation_req_id}` : batchCode;
+              const stockHint =
+                it.qty_available !== undefined && it.qty_available !== null
+                  ? ` • Store Stock: ${it.qty_available} ${it.unit_name || 'items'}`
+                  : '';
+              return `
+                <div class="flex items-center justify-between bg-[#F7F9F7] p-3 rounded-xl border border-[#DCE5DF] gap-3">
+                  <div class="flex items-center gap-3 min-w-0">
+                    <img src="${imgUrl}"
+                         onerror="this.src='https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=200&q=80'"
+                         class="w-11 h-11 rounded-xl object-cover border border-[#DCE5DF] shrink-0 bg-white">
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <span class="font-bold text-[#12372C] text-xs">${it.qty_needed} ${it.unit_name || 'items'} — ${it.food_name || it.food_type || 'Surplus Item'}</span>
+                        <span class="font-mono text-[10px] font-semibold text-[#1B4D3E] bg-[#E8EFEA] px-2 py-0.5 rounded">${reqIdLabel}</span>
+                      </div>
+                      <span class="text-[10px] text-[#4F695D] block mt-0.5">Category: ${it.food_type || 'Surplus'}${stockHint}</span>
+                      <span class="text-[10px] text-[#B3261E] font-semibold block mt-0.5">Exp: ${it.expiry_display || 'Standard Window'}</span>
+                    </div>
+                  </div>
+                  <div class="shrink-0">
+                    ${renderStatusPillHtml(it.status || btn.getAttribute('data-status') || 'Pending')}
+                  </div>
+                </div>
+              `;
+            })
+            .join('');
+        }
+
+        const approveBtn = document.getElementById('apModalApproveBtn');
+        if (approveBtn) {
+          approveBtn.onclick = () => {
+            window.closeModal('adminAppealDetailModal');
+            window.handleAdminDonationHubAction('appeal', 'approve', rawId, batchCode);
+          };
+        }
+        const completeBtn = document.getElementById('apModalCompleteBtn');
+        if (completeBtn) {
+          completeBtn.onclick = () => {
+            window.closeModal('adminAppealDetailModal');
+            window.handleAdminDonationHubAction('appeal', 'complete', rawId, batchCode);
+          };
+        }
+        const rejectBtn = document.getElementById('apModalRejectBtn');
+        if (rejectBtn) {
+          rejectBtn.onclick = () => {
+            window.closeModal('adminAppealDetailModal');
+            window.handleAdminDonationHubAction('appeal', 'reject', rawId, batchCode);
+          };
+        }
+
+        window.openModal('adminAppealDetailModal');
+      };
+
+      window.openFoodBankDirectoryProfile = function (cardEl) {
+        if (!cardEl) return;
+        const orgId = cardEl.getAttribute('data-id') || '';
+        const name = cardEl.getAttribute('data-name') || 'Food Bank';
+
+        const setText = (id, val) => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = val;
+        };
+
+        setText('fbDirInitial', name.charAt(0).toUpperCase());
+        setText('fbDirName', name);
+        setText('fbDirSub', `${cardEl.getAttribute('data-id-label') || ''} • Status: ${cardEl.getAttribute('data-status') || 'Active'}`);
+        setText('fbDirContact', `Coordinator: ${cardEl.getAttribute('data-contact') || 'N/A'}`);
+        setText('fbDirPhone', `Phone: ${cardEl.getAttribute('data-phone') || 'N/A'} | Hotline: ${cardEl.getAttribute('data-hotline') || 'N/A'}`);
+        setText('fbDirEmail', cardEl.getAttribute('data-email') || '');
+        setText('fbDirAddress', cardEl.getAttribute('data-address') || 'Cebu City');
+        setText('fbDirReceived', cardEl.getAttribute('data-received') || '0');
+        setText('fbDirDate', cardEl.getAttribute('data-date') || 'N/A');
+        setText('fbDirActiveReq', cardEl.getAttribute('data-active-req') || '0');
+        setText('fbDirClaimedDon', cardEl.getAttribute('data-claimed-don') || '0');
+
+        const permitBtn = document.getElementById('fbDirPermitBtn');
+        if (permitBtn) {
+          const rawPerm = cardEl.getAttribute('data-permit') || '';
+          permitBtn.onclick = () => {
+            if (typeof window.openVerifiedPermitDocument === 'function') {
+              window.openVerifiedPermitDocument('', rawPerm, `${name} — Accreditation Certificate`);
+            } else {
+              window.open(rawPerm, '_blank');
+            }
+          };
+        }
+
+        const filterBtn = document.getElementById('fbDirFilterBtn');
+        if (filterBtn) {
+          filterBtn.onclick = () => {
+            window.closeModal('foodBankDirectoryProfileModal');
+            window.navigateAdminSpa(`/donations/?foodbank=FB-${orgId}`);
+          };
+        }
+
+        const history = parseDatasetJson(cardEl.getAttribute('data-history'));
+        const rowStrings = (Array.isArray(history) ? history : []).map(
+          (h) => `
+            <tr class="hover:bg-[#F7F9F7]">
+              <td class="p-2.5 font-mono font-semibold text-[#1B4D3E]">${h.id}</td>
+              <td class="p-2.5 text-[#4F695D] font-medium">${h.type}</td>
+              <td class="p-2.5 font-semibold text-[#12372C]">${h.item}</td>
+              <td class="p-2.5 text-[#12372C]">${h.merchant}</td>
+              <td class="p-2.5 text-[#4F695D]">${h.date}</td>
+              <td class="p-2.5">${renderStatusPillHtml(h.status)}</td>
+            </tr>
+          `
+        );
+
+        if (typeof window.renderProgressiveRows === 'function') {
+          window.renderProgressiveRows(
+            'fbDirHistoryBody',
+            rowStrings,
+            `<tr><td colspan="6" class="p-3 text-center text-[#4F695D]">No appeals or claimed donations recorded yet.</td></tr>`,
+            6,
+            10
+          );
+        } else {
+          const tbody = document.getElementById('fbDirHistoryBody');
+          if (tbody) {
+            tbody.innerHTML =
+              rowStrings.length > 0
+                ? rowStrings.join('')
+                : `<tr><td colspan="6" class="p-3 text-center text-[#4F695D]">No appeals or claimed donations recorded yet.</td></tr>`;
+          }
+        }
+
+        window.openModal('foodBankDirectoryProfileModal');
+      };
+
+      function filterRowsBySearchAndDate(rows) {
+        const searchInput = document.getElementById('donationHubSearchInput');
+        const dateInput = document.getElementById('donationHubDateInput');
+        const q = (searchInput ? searchInput.value : '').trim().toLowerCase();
+        const dateVal = (dateInput ? dateInput.value : '').trim();
+
+        return rows.filter((row) => {
+          const hay = (row.getAttribute('data-search') || row.innerText || '').toLowerCase();
+          if (q && !hay.includes(q)) return false;
+
+          if (dateVal) {
+            const rowDate = row.getAttribute('data-date') || '';
+            const parts = dateVal.split(' to ');
+            if (parts.length === 2) {
+              if (rowDate < parts[0].trim() || rowDate > parts[1].trim()) return false;
+            } else if (rowDate !== dateVal) {
+              return false;
+            }
+          }
+          return true;
+        });
+      }
+
+      function buildPageList(curr, total) {
+        if (total <= 9) {
+          return Array.from({ length: total }, (_, i) => i + 1);
+        }
+        if (curr <= 6) {
+          return [1, 2, 3, 4, 5, 6, 7, 8, '...', total];
+        }
+        if (curr >= total - 5) {
+          return [1, '...', total - 7, total - 6, total - 5, total - 4, total - 3, total - 2, total - 1, total];
+        }
+        return [1, '...', curr - 2, curr - 1, curr, curr + 1, curr + 2, '...', total];
+      }
+
+      function renderScreenshotPagination(containerId, summaryId, curr, totalPages, totalItems, startIdx, endIdx, onPageClick) {
+        const summaryEl = document.getElementById(summaryId);
+        if (summaryEl) {
+          summaryEl.textContent =
+            totalItems > 0
+              ? `${(startIdx + 1).toLocaleString()}-${endIdx.toLocaleString()} of ${totalItems.toLocaleString()}`
+              : '0-0 of 0';
+        }
+
+        const btnContainer = document.getElementById(containerId);
+        if (!btnContainer) return;
+        btnContainer.innerHTML = '';
+
+        const backBtn = document.createElement('button');
+        backBtn.type = 'button';
+        backBtn.disabled = curr <= 1;
+        backBtn.innerHTML = '<span class="text-sm leading-none">&lsaquo;</span><span>Back</span>';
+        backBtn.className =
+          curr <= 1
+            ? 'h-9 px-3.5 rounded-lg border border-gray-200 bg-white text-gray-300 text-xs font-medium flex items-center gap-1.5 cursor-not-allowed select-none'
+            : 'h-9 px-3.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer';
+        if (curr > 1) backBtn.onclick = () => onPageClick(curr - 1);
+        btnContainer.appendChild(backBtn);
+
+        const pages = buildPageList(curr, totalPages);
+        pages.forEach((p) => {
+          if (p === '...') {
+            const dots = document.createElement('span');
+            dots.textContent = '⋯';
+            dots.className = 'w-9 h-9 rounded-lg border border-gray-200 bg-white text-gray-500 text-xs font-bold flex items-center justify-center select-none';
+            btnContainer.appendChild(dots);
+          } else {
+            const numBtn = document.createElement('button');
+            numBtn.type = 'button';
+            numBtn.textContent = String(p);
+            const isActive = p === curr;
+            numBtn.className = isActive
+              ? 'w-9 h-9 rounded-lg bg-black text-white border border-black text-xs font-bold flex items-center justify-center shadow-2xs'
+              : 'w-9 h-9 rounded-lg bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer';
+            if (!isActive) numBtn.onclick = () => onPageClick(p);
+            btnContainer.appendChild(numBtn);
+          }
+        });
+
+        const nextBtn = document.createElement('button');
+        nextBtn.type = 'button';
+        nextBtn.disabled = curr >= totalPages;
+        nextBtn.innerHTML = '<span>Next</span><span class="text-sm leading-none">&rsaquo;</span>';
+        nextBtn.className =
+          curr >= totalPages
+            ? 'h-9 px-3.5 rounded-lg border border-gray-200 bg-white text-gray-300 text-xs font-medium flex items-center gap-1.5 cursor-not-allowed select-none'
+            : 'h-9 px-3.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer';
+        if (curr < totalPages) nextBtn.onclick = () => onPageClick(curr + 1);
+        btnContainer.appendChild(nextBtn);
+      }
+
+      window.changeAppealsPageSize = function (val) {
+        appealsPageSize = parseInt(val, 10) || 20;
+        window.applyAppealsPagination(1);
+      };
+
+      window.changeDonationsPageSize = function (val) {
+        donationsPageSize = parseInt(val, 10) || 20;
+        window.applyDonationsPagination(1);
+      };
+
+      window.applyAppealsPagination = function (targetPage) {
+        if (isPaginatingAppeals) return;
+        isPaginatingAppeals = true;
+        try {
+          const table = document.getElementById('appealsTable');
+          if (!table) return;
+          const allRows = Array.from(table.querySelectorAll('tbody tr.appeal-data-row'));
+          const matched = filterRowsBySearchAndDate(allRows);
+
+          const total = matched.length;
+          const totalPages = Math.max(1, Math.ceil(total / appealsPageSize));
+          appealsPage = Math.max(1, Math.min(targetPage || appealsPage, totalPages));
+
+          const startIdx = (appealsPage - 1) * appealsPageSize;
+          const endIdx = Math.min(startIdx + appealsPageSize, total);
+
+          allRows.forEach((r) => {
+            r.style.display = '';
+            r.classList.add('pg-hidden');
+          });
+          matched.slice(startIdx, endIdx).forEach((r) => r.classList.remove('pg-hidden'));
+
+          renderScreenshotPagination(
+            'appealsPaginationButtons',
+            'appealsPaginationSummary',
+            appealsPage,
+            totalPages,
+            total,
+            startIdx,
+            endIdx,
+            window.applyAppealsPagination
+          );
+        } finally {
+          isPaginatingAppeals = false;
+        }
+      };
+
+      window.applyDonationsPagination = function (targetPage) {
+        if (isPaginatingDonations) return;
+        isPaginatingDonations = true;
+        try {
+          const table = document.getElementById('donationsTable');
+          if (!table) return;
+          const allRows = Array.from(table.querySelectorAll('tbody tr.donation-data-row'));
+          const matched = filterRowsBySearchAndDate(allRows);
+
+          const total = matched.length;
+          const totalPages = Math.max(1, Math.ceil(total / donationsPageSize));
+          donationsPage = Math.max(1, Math.min(targetPage || donationsPage, totalPages));
+
+          const startIdx = (donationsPage - 1) * donationsPageSize;
+          const endIdx = Math.min(startIdx + donationsPageSize, total);
+
+          allRows.forEach((r) => {
+            r.style.display = '';
+            r.classList.add('pg-hidden');
+          });
+          matched.slice(startIdx, endIdx).forEach((r) => r.classList.remove('pg-hidden'));
+
+          renderScreenshotPagination(
+            'donationsPaginationButtons',
+            'donationsPaginationSummary',
+            donationsPage,
+            totalPages,
+            total,
+            startIdx,
+            endIdx,
+            window.applyDonationsPagination
+          );
+        } finally {
+          isPaginatingDonations = false;
+        }
+      };
+
+      function initDonationHubPaginationBindings() {
+        const searchInput = document.getElementById('donationHubSearchInput');
+        if (searchInput && !searchInput.dataset.boundDonPg) {
+          searchInput.dataset.boundDonPg = '1';
+          searchInput.addEventListener('input', function () {
+            setTimeout(() => {
+              window.applyAppealsPagination(1);
+              window.applyDonationsPagination(1);
+            }, 20);
+          });
+        }
+        const dateInput = document.getElementById('donationHubDateInput');
+        if (dateInput && !dateInput.dataset.boundDonPg) {
+          dateInput.dataset.boundDonPg = '1';
+          dateInput.addEventListener('change', function () {
+            setTimeout(() => {
+              window.applyAppealsPagination(1);
+              window.applyDonationsPagination(1);
+            }, 60);
+          });
+        }
+
+        const appealsTbody = document.querySelector('#appealsTable tbody');
+        if (appealsTbody && !appealsTbody.dataset.boundObs) {
+          appealsTbody.dataset.boundObs = '1';
+          const obs1 = new MutationObserver(() => {
+            if (!isPaginatingAppeals) window.applyAppealsPagination(appealsPage);
+          });
+          obs1.observe(appealsTbody, { childList: true });
+        }
+
+        const donationsTbody = document.querySelector('#donationsTable tbody');
+        if (donationsTbody && !donationsTbody.dataset.boundObs) {
+          donationsTbody.dataset.boundObs = '1';
+          const obs2 = new MutationObserver(() => {
+            if (!isPaginatingDonations) window.applyDonationsPagination(donationsPage);
+          });
+          obs2.observe(donationsTbody, { childList: true });
+        }
+
+        window.applyAppealsPagination(1);
+        window.applyDonationsPagination(1);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initDonationHubPaginationBindings);
+      } else {
+        initDonationHubPaginationBindings();
+      }
+      setTimeout(initDonationHubPaginationBindings, 50);
+    })();
+  </script>
+{% endblock %}

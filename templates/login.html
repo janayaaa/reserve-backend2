@@ -1,0 +1,218 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ReServe Admin — Sign In</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body { font-family: 'Poppins', sans-serif; }
+  </style>
+</head>
+<body class="bg-[#F4F8F6] min-h-screen w-screen overflow-x-hidden flex antialiased text-[#12372C] selection:bg-[#1B4D3E] selection:text-white">
+  {% csrf_token %}
+
+  <!-- =================================================================== -->
+  <!-- FULL-SCREEN ENTERPRISE LOGIN PAGE LOADER                            -->
+  <!-- =================================================================== -->
+  <div id="loginFullPageLoader" style="z-index: 10000;" class="hidden fixed inset-0 bg-[#12372C]/95 backdrop-blur-md flex-col items-center justify-center text-white select-none p-6">
+    <div class="relative flex items-center justify-center mb-6">
+      <div class="w-24 h-24 rounded-full border-4 border-[#3A826D]/30 border-t-[#EBB338] animate-spin"></div>
+      <div class="absolute w-16 h-16 rounded-2xl bg-[#1B4D3E] border border-white/15 flex items-center justify-center p-2.5 shadow-lg">
+        <svg class="w-full h-full" viewBox="0 0 210 210">
+          <path d="M100 78 C100 48 130 48 130 78" fill="none" stroke="#8BC3A3" stroke-width="12" stroke-linecap="round"/>
+          <circle cx="92" cy="78" r="20" fill="#D64541"/>
+          <path d="M148 88 C142 66 154 46 172 42 C176 62 172 82 156 90 Z" fill="#EBB338"/>
+          <rect x="60" y="84" width="110" height="112" rx="20" fill="#F4F8F6"/>
+          <g transform="translate(88,108)">
+            <path d="M0 76 L0 0 L28 0 C42 0 50 8 50 20 C50 30 44 37 34 39 L52 76 L36 76 L20 41 L16 41 L16 76 Z" fill="#1B4D3E"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+    <h3 id="loginLoaderTitle" class="text-lg font-bold tracking-wide text-white">Authenticating Administrator...</h3>
+    <p id="loginLoaderSubtitle" class="text-xs text-[#8BC3A3] mt-1.5 font-medium">Verifying RBAC credentials &amp; initializing Cebu City console</p>
+  </div>
+
+  <div class="min-h-screen w-full flex flex-col lg:flex-row">
+    <!-- LEFT BRAND PANEL -->
+    <div class="hidden lg:flex lg:w-[48%] xl:w-[50%] relative flex-col justify-between bg-[#12372C] p-12 xl:p-16 overflow-hidden select-none">
+      <div class="absolute inset-0 pointer-events-none"
+        style="background: radial-gradient(circle at 50% 45%, rgba(139, 195, 163, 0.16) 0%, rgba(27, 77, 62, 0.10) 40%, transparent 70%);">
+      </div>
+      <div class="absolute inset-0 pointer-events-none opacity-[0.04]"
+        style="background-image: linear-gradient(#8BC3A3 1px, transparent 1px), linear-gradient(90deg, #8BC3A3 1px, transparent 1px); background-size: 40px 40px;">
+      </div>
+
+      <div class="relative z-10 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <span class="w-2 h-2 rounded-full bg-[#8BC3A3]"></span>
+          <span class="text-[11px] font-semibold tracking-[0.2em] text-[#8BC3A3] uppercase">ReServe Enterprise</span>
+        </div>
+        <span class="text-[10px] font-medium text-white/50 tracking-wider uppercase border border-white/10 px-2.5 py-1 rounded-lg">
+          Cebu City, Philippines
+        </span>
+      </div>
+
+      <div class="relative z-10 flex flex-col items-center justify-center text-center my-auto py-8">
+        <div class="relative">
+          <div class="absolute -inset-6 rounded-full bg-gradient-to-tr from-[#3A826D]/30 via-[#8BC3A3]/15 to-[#EBB338]/20 blur-2xl opacity-80"></div>
+          <div class="relative w-48 h-48 xl:w-56 xl:h-56 rounded-[36px] bg-white/[0.04] backdrop-blur-md border border-white/15 shadow-2xl flex items-center justify-center p-6">
+            <svg class="w-full h-full drop-shadow-xl" viewBox="0 0 210 210">
+              <rect x="0" y="118" width="46" height="9" rx="4.5" fill="#8BC3A3" transform="rotate(-8 23 122)"/>
+              <rect x="8" y="140" width="60" height="9" rx="4.5" fill="#8BC3A3" transform="rotate(-8 38 144)"/>
+              <rect x="14" y="162" width="42" height="9" rx="4.5" fill="#8BC3A3" transform="rotate(-8 35 166)"/>
+              <path d="M100 78 C100 48 130 48 130 78" fill="none" stroke="#8BC3A3" stroke-width="12" stroke-linecap="round"/>
+              <path d="M112 84 C100 66 106 44 126 34 C130 54 126 72 116 86 Z" fill="#8BC3A3"/>
+              <path d="M126 34 C142 40 148 60 138 80 L118 84 C122 66 122 48 126 34 Z" fill="#3A826D"/>
+              <circle cx="92" cy="78" r="20" fill="#D64541"/>
+              <path d="M86 60 C89 54 97 54 100 59" stroke="#3A826D" stroke-width="3.4" stroke-linecap="round" fill="none"/>
+              <path d="M148 88 C142 66 154 46 172 42 C176 62 172 82 156 90 C153 91 150 90 148 88 Z" fill="#EBB338"/>
+              <path d="M172 42 C177 40 181 43 180 48 C176 48 173 46 172 42 Z" fill="#B45309"/>
+              <rect x="60" y="84" width="110" height="112" rx="20" fill="#F4F8F6"/>
+              <g transform="translate(88,108)">
+                <path d="M0 76 L0 0 L28 0 C42 0 50 8 50 20 C50 30 44 37 34 39 L52 76 L36 76 L20 41 L16 41 L16 76 Z" fill="#1B4D3E"/>
+                <path d="M16 8 C10 16 10 26 18 32 C24 22 24 14 16 8 Z" fill="#8BC3A3"/>
+                <path d="M18 32 C26 30 32 22 30 12 C22 14 16 20 18 32 Z" fill="#3A826D"/>
+              </g>
+            </svg>
+          </div>
+        </div>
+
+        <h1 class="mt-8 text-4xl xl:text-5xl font-extrabold text-white tracking-tight">
+          Re<span class="text-[#EBB338]">Serve</span>
+        </h1>
+        <p class="mt-2 text-xs font-semibold uppercase tracking-[0.22em] text-[#8BC3A3]">
+          Surplus Rescue &amp; Compliance Network
+        </p>
+        <p class="mt-4 max-w-sm text-xs text-white/60 leading-relaxed">
+          Centralized administration for partner establishments, AI document verification, and community food bank distribution.
+        </p>
+      </div>
+
+      <div class="relative z-10 flex items-center justify-between text-[11px] text-white/40 border-t border-white/10 pt-5">
+        <span>Good Food. Zero Waste.</span>
+        <span>&copy; 2026 ReServe Platform</span>
+      </div>
+    </div>
+
+    <!-- RIGHT SIGN-IN PANEL -->
+    <div class="flex-1 flex flex-col justify-center items-center px-6 py-12 sm:px-12 bg-[#F4F8F6]">
+      <div class="w-full max-w-[390px]">
+        <div class="bg-white rounded-2xl border border-[#DCE5DF] shadow-sm p-8">
+          <div class="mb-6">
+            <div class="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#1B4D3E] bg-[#E8EFEA] px-2.5 py-1 rounded-lg mb-3">
+              <i data-lucide="shield" class="w-3.5 h-3.5 text-[#3A826D]"></i> Admin Portal
+            </div>
+            <h2 class="text-xl font-bold text-[#12372C] tracking-tight">Sign in to your account</h2>
+            <p class="text-xs text-[#4F695D] mt-1">Enter your authorized administrator credentials.</p>
+          </div>
+
+          <form method="post" action="" id="loginForm" class="space-y-4">
+            <div>
+              <label for="email" class="block text-[11px] font-semibold text-[#12372C] mb-1.5">
+                Work Email
+              </label>
+              <div class="relative">
+                <i data-lucide="mail" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#4F695D] pointer-events-none"></i>
+                <input id="email" type="email" name="email" placeholder="admin@reserve.org" autocomplete="username" required
+                  class="w-full pl-10 pr-3.5 py-2.5 bg-[#F7F9F7] border border-[#DCE5DF] rounded-xl text-xs font-medium text-[#12372C] placeholder-[#4F695D]/60 focus:outline-none focus:border-[#1B4D3E] focus:bg-white transition-all">
+              </div>
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label for="pw" class="text-[11px] font-semibold text-[#12372C]">
+                  Password
+                </label>
+                <button type="button" onclick="openModal('forgotPwModal')" class="text-[11px] font-medium text-[#3A826D] hover:text-[#1B4D3E] transition-colors">
+                  Forgot password?
+                </button>
+              </div>
+              <div class="relative">
+                <i data-lucide="lock" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#4F695D] pointer-events-none"></i>
+                <input id="pw" type="password" name="password" placeholder="••••••••" autocomplete="current-password" required
+                  class="w-full pl-10 pr-10 py-2.5 bg-[#F7F9F7] border border-[#DCE5DF] rounded-xl text-xs font-medium text-[#12372C] placeholder-[#4F695D]/60 focus:outline-none focus:border-[#1B4D3E] focus:bg-white transition-all">
+                <button type="button" onclick="togglePw()" class="absolute right-3 top-1/2 -translate-y-1/2 text-[#4F695D] hover:text-[#12372C] focus:outline-none">
+                  <i id="eyeIcon" data-lucide="eye" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="flex items-center pt-0.5">
+              <label class="flex items-center gap-2 text-xs text-[#4F695D] cursor-pointer select-none">
+                <input type="checkbox" id="rememberAdmin" name="remember" class="w-3.5 h-3.5 rounded border-[#DCE5DF] accent-[#1B4D3E]" checked>
+                Keep session active
+              </label>
+            </div>
+
+            <p id="formError" class="hidden text-[11px] font-semibold text-[#B3261E] bg-[#FBE4E1] border border-[#B3261E]/30 rounded-xl px-3.5 py-2.5"></p>
+
+            <button type="submit" class="w-full bg-[#3A826D] hover:bg-[#1B4D3E] text-white font-semibold text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-2 mt-2">
+              <span>Sign In</span>
+            </button>
+          </form>
+        </div>
+
+        <div class="mt-6 flex items-center justify-center gap-2 text-[11px] text-[#4F695D]">
+          <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+          <span>Protected by Role-Based Access Control (RBAC)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN EMAIL PASSWORD RESET MODAL -->
+  <div id="forgotPwModal" class="modal-overlay hidden fixed inset-0 bg-[#12372C]/60 backdrop-blur-xs flex justify-center items-center z-50 p-4">
+    <div class="bg-white rounded-2xl w-full max-w-sm shadow-2xl border border-[#DCE5DF] overflow-hidden">
+      <div class="px-6 py-4 border-b border-[#DCE5DF] flex justify-between items-center">
+        <div class="flex items-center gap-2">
+          <i data-lucide="mail-check" class="w-4 h-4 text-[#1B4D3E]"></i>
+          <h3 class="font-bold text-[#12372C] text-xs">Administrator Password Reset</h3>
+        </div>
+        <button onclick="closeModal('forgotPwModal')" class="text-[#4F695D] hover:text-[#12372C] text-xs font-bold">✕</button>
+      </div>
+      <div class="p-6 space-y-3 text-xs">
+        <p class="text-[#4F695D] leading-relaxed">
+          Click below to send an official password reset link directly to the RESERVE Administrator inbox (<strong class="text-[#1B4D3E]">reserve.org.com@gmail.com</strong>).
+        </p>
+        <div id="adminResetFeedback" class="hidden p-3 rounded-xl font-semibold text-[11px]"></div>
+      </div>
+      <div class="px-6 py-3.5 bg-[#F7F9F7] border-t border-[#DCE5DF] flex justify-end gap-2">
+        <button onclick="closeModal('forgotPwModal')" class="bg-white border border-[#DCE5DF] text-[#4F695D] font-semibold text-xs px-4 py-2 rounded-xl">
+          Cancel
+        </button>
+        <button id="sendAdminResetLinkBtn" onclick="sendAdminPasswordResetEmail()" class="bg-[#3A826D] hover:bg-[#1B4D3E] text-white font-semibold text-xs px-5 py-2 rounded-xl transition-colors">
+          Send Reset Link
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.togglePw = function() {
+      const pwInput = document.getElementById('pw');
+      const eyeIcon = document.getElementById('eyeIcon');
+      if (!pwInput) return;
+      if (pwInput.type === 'password') {
+        pwInput.type = 'text';
+        if (eyeIcon) eyeIcon.setAttribute('data-lucide', 'eye-off');
+      } else {
+        pwInput.type = 'password';
+        if (eyeIcon) eyeIcon.setAttribute('data-lucide', 'eye');
+      }
+      if (window.lucide) window.lucide.createIcons();
+    };
+
+    document.addEventListener("DOMContentLoaded", () => {
+      if (window.lucide) lucide.createIcons();
+    });
+  </script>
+  <script src="{% static 'js/main.js' %}?v=5.2"></script>
+</body>
+</html>

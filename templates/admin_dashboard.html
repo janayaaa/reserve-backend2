@@ -1,0 +1,473 @@
+{% extends 'base_admin.html' %}
+
+{% block title %}ReServe Admin - Dashboard{% endblock %}
+
+{% block extra_head %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
+{% block body_attrs %}
+  data-chart-labels='{{ chart_labels_json|safe }}'
+  data-chart-counts='{{ chart_counts_json|safe }}'
+  data-donut-counts='[{{ bakeshop_count }}, {{ market_count }}, {{ other_count }}]'
+{% endblock %}
+
+{% block content %}
+  <style>
+    tr.pg-hidden { display: none !important; }
+  </style>
+
+  <!-- Page Title Bar -->
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h2 class="text-2xl font-bold text-[#12372C] tracking-tight">Executive Overview &amp; Security Audit Console</h2>
+      <p class="text-xs text-[#4F695D] mt-0.5">Real-time Cebu City food rescue telemetry, partner growth, and immutable system security logs</p>
+    </div>
+    <div class="flex items-center gap-2 bg-white border border-[#DCE5DF] px-3.5 py-2 rounded-xl text-xs font-medium text-[#12372C]">
+      <span class="w-2 h-2 rounded-full bg-[#3A826D] animate-pulse"></span>
+      <span>Cebu City Haversine Active ({{ gov_config.radius_km|default:"10" }}km)</span>
+    </div>
+  </div>
+
+  <!-- Mobile-Schema 4-Column KPI Stat Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5 w-full">
+    <div class="bg-[#1B4D3E] border border-[#1B4D3E] p-4 rounded-2xl text-white shadow-xs flex items-center gap-3.5">
+      <div class="w-11 h-11 rounded-full bg-[#3A826D] flex items-center justify-center shrink-0">
+        <i data-lucide="leaf" class="w-5 h-5 text-white"></i>
+      </div>
+      <div>
+        <p class="text-[11px] text-white/80 font-normal">Total Food Rescued</p>
+        <h3 class="text-xl font-bold leading-tight mt-0.5">{{ total_food_rescued_kg }} kg</h3>
+        <p class="text-[10px] text-[#8BC3A3] mt-0.5">Diverted from spoilage</p>
+      </div>
+    </div>
+
+    <div class="bg-white border border-[#DCE5DF] p-4 rounded-2xl shadow-2xs flex items-center gap-3.5">
+      <div class="w-11 h-11 rounded-full bg-[#E8EFEA] flex items-center justify-center shrink-0 text-[#1B4D3E]">
+        <i data-lucide="store" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <p class="text-[11px] text-[#4F695D]">Partner Establishments</p>
+        <h3 class="text-xl font-bold text-[#12372C] leading-tight mt-0.5">{{ active_merchants }} Active</h3>
+        <p class="text-[10px] text-amber-600 font-medium mt-0.5">{{ pending_merchants }} Pending KYB review</p>
+      </div>
+    </div>
+
+    <div class="bg-white border border-[#DCE5DF] p-4 rounded-2xl shadow-2xs flex items-center gap-3.5">
+      <div class="w-11 h-11 rounded-full bg-[#E8EFEA] flex items-center justify-center shrink-0 text-[#1B4D3E]">
+        <i data-lucide="heart-handshake" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <p class="text-[11px] text-[#4F695D]">Food Bank &amp; NGO Hubs</p>
+        <h3 class="text-xl font-bold text-[#12372C] leading-tight mt-0.5">{{ total_foodbanks }} Hubs</h3>
+        <p class="text-[10px] text-[#3A826D] font-medium mt-0.5">Verified community partners</p>
+      </div>
+    </div>
+
+    <div class="bg-[#E7EEE9] border border-[#D5E3D9] p-4 rounded-2xl shadow-2xs flex items-center gap-3.5">
+      <div class="w-11 h-11 rounded-full bg-white flex items-center justify-center shrink-0 text-[#1B4D3E]">
+        <i data-lucide="users" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <p class="text-[11px] text-[#4F695D]">Registered Consumers</p>
+        <h3 class="text-xl font-bold text-[#12372C] leading-tight mt-0.5">{{ total_consumers }} Buyers</h3>
+        <p class="text-[10px] text-[#1B4D3E] font-medium mt-0.5">Active rescue accounts</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analytics Charts Row -->
+  <div class="grid grid-cols-1 xl:grid-cols-12 gap-5 w-full">
+    <div class="xl:col-span-8 bg-white p-5 md:p-6 rounded-2xl border border-[#DCE5DF] shadow-2xs flex flex-col justify-between">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3.5">
+        <div>
+          <span class="text-[10px] font-semibold uppercase tracking-wider text-[#4F695D]">Platform Economic Impact</span>
+          <h2 class="text-2xl font-bold text-[#12372C] mt-0.5">₱{{ total_value_rescued }}</h2>
+          <p class="text-[11px] text-[#4F695D]">Cumulative rescued surplus value (20% online commitment fee split)</p>
+        </div>
+        <span class="text-[11px] font-medium bg-[#E7F0E9] text-[#3A826D] px-3 py-1 rounded-lg">6-Month Registration Trend</span>
+      </div>
+
+      <!-- 3-Card Platform Revenue Breakdown Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+        <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-3.5 rounded-xl">
+          <p class="text-[10px] font-semibold uppercase tracking-wider text-[#4F695D]">Total Platform Revenue</p>
+          <p class="text-lg font-bold text-[#12372C] mt-1">₱{{ total_platform_revenue|default:"0.00" }}</p>
+          <p class="text-[10px] text-[#4F695D] mt-0.5">System fees + Pro subscriptions</p>
+        </div>
+
+        <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-3.5 rounded-xl">
+          <p class="text-[10px] font-semibold uppercase tracking-wider text-[#4F695D]">Order System Fees (10% / 4%)</p>
+          <p class="text-lg font-bold text-[#12372C] mt-1">₱{{ order_commissions_total|default:"0.00" }}</p>
+          <p class="text-[10px] text-[#4F695D] mt-0.5">Settled from 20% online deposit</p>
+        </div>
+
+        <div class="bg-[#F7F9F7] border border-[#DCE5DF] p-3.5 rounded-xl">
+          <p class="text-[10px] font-semibold uppercase tracking-wider text-[#4F695D]">Pro Tier Subscriptions (₱149/mo)</p>
+          <p class="text-lg font-bold text-[#3A826D] mt-1">₱{{ pro_subscription_rev|default:"0.00" }}</p>
+          <p class="text-[10px] text-[#4F695D] mt-0.5">Recurring SaaS upgrades</p>
+        </div>
+      </div>
+
+      <div class="relative h-56 w-full">
+        <canvas id="userGrowthChart"></canvas>
+      </div>
+    </div>
+
+    <div class="xl:col-span-4 bg-white p-5 md:p-6 rounded-2xl border border-[#DCE5DF] shadow-2xs flex flex-col justify-between">
+      <div>
+        <span class="text-[10px] font-semibold uppercase tracking-wider text-[#4F695D]">Supply Composition</span>
+        <h3 class="text-sm font-semibold text-[#12372C] mt-0.5">Merchant Partner Distribution</h3>
+      </div>
+      <div class="h-48 relative flex items-center justify-center my-2">
+        <canvas id="trafficDonutChart"></canvas>
+      </div>
+      <div class="grid grid-cols-2 gap-2 text-center pt-3 border-t border-[#DCE5DF]">
+        <div class="bg-[#F7F9F7] p-2 rounded-xl border border-[#DCE5DF]/60">
+          <p class="text-sm font-bold text-[#1B4D3E]">{{ bakeshop_pct }}%</p>
+          <p class="text-[10px] text-[#4F695D]">Bakeshops</p>
+        </div>
+        <div class="bg-[#F7F9F7] p-2 rounded-xl border border-[#DCE5DF]/60">
+          <p class="text-sm font-bold text-[#3A826D]">{{ market_pct }}%</p>
+          <p class="text-[10px] text-[#4F695D]">Markets</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Marketplace Listings & Orders (Strictly Capped at 10 Rows + View Button + Open Directory) -->
+  <div class="bg-white p-5 rounded-2xl border border-[#DCE5DF] shadow-2xs space-y-3.5">
+    <div class="flex flex-wrap justify-between items-center gap-2 border-b border-[#DCE5DF] pb-3">
+      <div>
+        <h3 class="text-sm font-bold text-[#12372C]">Recent Marketplace Listings &amp; Orders</h3>
+        <p class="text-[11px] text-[#4F695D]">Latest 10 active surplus listings, consumer reservations (20% Online / 80% Cash), and donations</p>
+      </div>
+      <a href="/food-listing/" data-spa-link="true" class="text-xs font-semibold text-[#3A826D] hover:text-[#1B4D3E] flex items-center gap-1">
+        <span>Open Directory</span>
+        <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+      </a>
+    </div>
+
+    <div class="overflow-x-auto rounded-xl border border-[#DCE5DF]">
+      <table id="dashboardRecentMarketplaceTable" class="w-full text-left text-xs min-w-[680px]">
+        <thead class="bg-[#F3F6F4] text-[#12372C] font-semibold uppercase tracking-wider text-[10px] border-b border-[#DCE5DF]">
+          <tr>
+            <th class="p-3">Ref ID</th>
+            <th class="p-3">Establishment</th>
+            <th class="p-3">Surplus Item / Order</th>
+            <th class="p-3">Buyer / Recipient</th>
+            <th class="p-3">Value / Qty</th>
+            <th class="p-3">Status</th>
+            <th class="p-3">Action</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-[#DCE5DF] font-normal">
+          {% for tx in live_transactions|slice:":10" %}
+          <tr class="hover:bg-[#F7F9F7] transition-colors">
+            <td class="p-3 font-mono font-semibold text-[#1B4D3E]">{{ tx.id }}</td>
+            <td class="p-3 text-[#12372C] font-medium">{{ tx.establishment }}</td>
+            <td class="p-3 font-semibold text-[#12372C]">{{ tx.title }}</td>
+            <td class="p-3 text-[#4F695D]">{{ tx.buyer|default:"Marketplace Feed" }}</td>
+            <td class="p-3 font-semibold text-[#3A826D]">{{ tx.amount }}</td>
+            <td class="p-3">
+              {% if 'flag' in tx.status|lower or 'no-show' in tx.status|lower or 'reject' in tx.status|lower %}
+                <span class="bg-[#FBE4E1] text-[#B3261E] px-2.5 py-1 rounded-lg text-[10px] font-semibold">{{ tx.status }}</span>
+              {% elif 'pend' in tx.status|lower or 'ongoing' in tx.status|lower %}
+                <span class="bg-[#FEF3C7] text-[#B45309] px-2.5 py-1 rounded-lg text-[10px] font-semibold">{{ tx.status }}</span>
+              {% else %}
+                <span class="bg-[#E4F0E8] text-[#1F6B52] px-2.5 py-1 rounded-lg text-[10px] font-semibold">{{ tx.status }}</span>
+              {% endif %}
+            </td>
+            <td class="p-3">
+              <button type="button"
+                      onclick="window.openDashboardMarketplaceRecordModal(this)"
+                      data-record="{{ tx.record_json|escape }}"
+                      data-id="{{ tx.id }}"
+                      data-title="{{ tx.title }}"
+                      data-establishment="{{ tx.establishment }}"
+                      data-buyer="{{ tx.buyer|default:'Verified Recipient' }}"
+                      data-date="{{ tx.date }}"
+                      data-deadline="{{ tx.pickup_deadline|default:'Standard Window' }}"
+                      data-amount="{{ tx.amount }}"
+                      data-total="{{ tx.total_value|default:tx.amount }}"
+                      data-deposit="{{ tx.deposit_paid|default:'₱0.00' }}"
+                      data-remaining="{{ tx.remaining_balance|default:'₱0.00' }}"
+                      data-status="{{ tx.status }}"
+                      class="flex items-center gap-1.5 bg-[#3A826D] hover:bg-[#1B4D3E] text-white px-3 py-1.5 rounded-xl text-[11px] font-semibold transition-colors cursor-pointer">
+                <i data-lucide="eye" class="w-3.5 h-3.5"></i> View
+              </button>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7" class="p-8 text-center text-[#4F695D] text-xs">No active food listings or transactions in the database yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- SYSTEM SECURITY & TRANSPARENCY AUDIT LOGS LEDGER (20 ROWS/PAGE)           -->
+  <!-- ========================================================================= -->
+  <div class="bg-white rounded-2xl border border-[#DCE5DF] shadow-2xs overflow-hidden">
+    <div class="p-5 border-b border-[#DCE5DF] space-y-3.5">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-[#1B4D3E] text-white flex items-center justify-center shrink-0">
+            <i data-lucide="shield-check" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-[#12372C]">System Security &amp; Transparency Audit Logs</h3>
+            <p class="text-[11px] text-[#4F695D]">Immutable ledger of authentication sessions, KYB approvals, compliance strikes, automated payouts, and listing actions</p>
+          </div>
+        </div>
+
+        <div class="relative w-full sm:w-72">
+          <i data-lucide="search" class="w-4 h-4 text-[#4F695D] absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+          <input type="text" id="auditLogSearchInput" placeholder="Search log ID, actor, or event..." class="w-full pl-10 pr-4 py-2 bg-[#F7F9F7] rounded-xl text-xs border border-[#DCE5DF] text-[#12372C] placeholder-[#4F695D]/70 focus:outline-none focus:border-[#1B4D3E] focus:bg-white transition-all">
+        </div>
+      </div>
+
+      <!-- Category Filter Tabs -->
+      <div class="flex gap-2 overflow-x-auto pb-1">
+        <button type="button" onclick="window.selectAuditLogBucket('all', this)" class="audit-bucket-tab px-4 py-2 text-xs font-black rounded-xl bg-[#1B4D3E] text-white">
+          All Logs ({{ system_audit_logs|length }})
+        </button>
+        <button type="button" onclick="window.selectAuditLogBucket('security', this)" class="audit-bucket-tab px-4 py-2 text-xs font-semibold rounded-xl bg-[#F7F9F7] text-[#4F695D] hover:text-[#12372C] border border-[#DCE5DF]">
+          Security &amp; Auth
+        </button>
+        <button type="button" onclick="window.selectAuditLogBucket('kyb', this)" class="audit-bucket-tab px-4 py-2 text-xs font-semibold rounded-xl bg-[#F7F9F7] text-[#4F695D] hover:text-[#12372C] border border-[#DCE5DF]">
+          KYB &amp; Compliance
+        </button>
+        <button type="button" onclick="window.selectAuditLogBucket('payouts', this)" class="audit-bucket-tab px-4 py-2 text-xs font-semibold rounded-xl bg-[#F7F9F7] text-[#4F695D] hover:text-[#12372C] border border-[#DCE5DF]">
+          Automated Payouts
+        </button>
+        <button type="button" onclick="window.selectAuditLogBucket('operations', this)" class="audit-bucket-tab px-4 py-2 text-xs font-semibold rounded-xl bg-[#F7F9F7] text-[#4F695D] hover:text-[#12372C] border border-[#DCE5DF]">
+          Listings &amp; Donations
+        </button>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table id="systemAuditLogsTable" class="w-full text-left text-xs min-w-[740px]">
+        <thead class="bg-[#F3F6F4] text-[#12372C] font-semibold uppercase tracking-wider text-[10px] border-b border-[#DCE5DF]">
+          <tr>
+            <th class="p-3.5">Log ID</th>
+            <th class="p-3.5">Category</th>
+            <th class="p-3.5">Actor / Account</th>
+            <th class="p-3.5">Event Description &amp; Audit Trail</th>
+            <th class="p-3.5">Timestamp (Latest First)</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-[#DCE5DF]">
+          {% for log in system_audit_logs %}
+          <tr class="hover:bg-[#F7F9F7] transition-colors audit-log-row"
+              data-bucket="{{ log.bucket }}"
+              data-search="{{ log.id|lower }} {{ log.category|lower }} {{ log.actor|lower }} {{ log.message|lower }} {{ log.timestamp|lower }}">
+            <td class="p-3.5 font-mono font-semibold text-[#1B4D3E] whitespace-nowrap">{{ log.id }}</td>
+            <td class="p-3.5 whitespace-nowrap">
+              {% if log.bucket == 'security' %}
+                <span class="bg-[#E1EEF8] text-[#2C5F8A] px-2.5 py-1 rounded-lg text-[10px] font-semibold">{{ log.category }}</span>
+              {% elif log.bucket == 'kyb' %}
+                <span class="bg-[#FEF3C7] text-[#B45309] px-2.5 py-1 rounded-lg text-[10px] font-semibold">{{ log.category }}</span>
+              {% elif log.bucket == 'payouts' %}
+                <span class="bg-[#E4F0E8] text-[#1F6B52] px-2.5 py-1 rounded-lg text-[10px] font-semibold">{{ log.category }}</span>
+              {% else %}
+                <span class="bg-[#E8EFEA] text-[#12372C] px-2.5 py-1 rounded-lg text-[10px] font-semibold">{{ log.category }}</span>
+              {% endif %}
+            </td>
+            <td class="p-3.5 font-semibold text-[#12372C] whitespace-nowrap">{{ log.actor }}</td>
+            <td class="p-3.5 text-[#12372C] leading-relaxed">{{ log.message }}</td>
+            <td class="p-3.5 text-[#4F695D] font-mono text-[11px] whitespace-nowrap">{{ log.timestamp }}</td>
+          </tr>
+          {% empty %}
+          <tr class="empty-row">
+            <td colspan="5" class="p-8 text-center text-[#4F695D] text-xs">No system security or audit logs recorded yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SCREENSHOT-MATCHED 20-ROW PAGINATION FOOTER -->
+    <div id="auditLogsPaginationBar" class="px-5 py-4 bg-white border-t border-[#E5E7EB]">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div id="auditLogsPaginationButtons" class="flex items-center gap-1.5 flex-wrap"></div>
+        <div class="flex items-center gap-2.5">
+          <span class="text-xs font-medium text-gray-700">Result per page</span>
+          <select id="auditLogsPageSizeSelect" onchange="window.changeAuditLogsPageSize(this.value)" class="h-9 px-3 rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-800 focus:outline-none focus:border-gray-400 cursor-pointer">
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+      </div>
+      <div id="auditLogsPaginationSummary" class="mt-2.5 text-xs font-medium text-gray-600">0-0 of 0</div>
+    </div>
+  </div>
+
+  <!-- IMMEDIATE 20-ROW PAGINATION + DASHBOARD RECORD VIEWER SCRIPT -->
+  <script>
+    (function () {
+      let currentPage = 1;
+      let pageSize = 20;
+      let activeBucket = 'all';
+
+      window.openDashboardMarketplaceRecordModal = function (btn) {
+        if (!btn) return;
+        let rec = null;
+        try {
+          rec = JSON.parse(btn.getAttribute('data-record') || 'null');
+        } catch (e) {
+          rec = null;
+        }
+        if (!rec) {
+          rec = {
+            id: btn.getAttribute('data-id') || 'REC',
+            receipt_type: 'Marketplace Record Summary',
+            gateway_ref: 'VERIFIED-' + (btn.getAttribute('data-id') || ''),
+            title: btn.getAttribute('data-title') || 'Surplus Item',
+            establishment: btn.getAttribute('data-establishment') || 'Partner Merchant',
+            buyer: btn.getAttribute('data-buyer') || 'Verified Recipient',
+            date: btn.getAttribute('data-date') || 'Recent',
+            pickup_deadline: btn.getAttribute('data-deadline') || 'Standard Window',
+            total_value: btn.getAttribute('data-total') || btn.getAttribute('data-amount') || '₱0.00',
+            deposit_paid: btn.getAttribute('data-deposit') || '₱0.00',
+            remaining_balance: btn.getAttribute('data-remaining') || '₱0.00',
+            amount: btn.getAttribute('data-amount') || '₱0.00',
+            status: btn.getAttribute('data-status') || 'Active',
+          };
+        }
+        window.ADMIN_TX_CACHE = window.ADMIN_TX_CACHE || {};
+        window.ADMIN_TX_CACHE[rec.id] = rec;
+        if (typeof window.openDigitalReceiptModal === 'function') {
+          window.openDigitalReceiptModal(rec.id);
+        }
+      };
+
+      function buildPageList(curr, total) {
+        if (total <= 9) return Array.from({ length: total }, (_, i) => i + 1);
+        if (curr <= 6) return [1, 2, 3, 4, 5, 6, 7, 8, '...', total];
+        if (curr >= total - 5) return [1, '...', total - 7, total - 6, total - 5, total - 4, total - 3, total - 2, total - 1, total];
+        return [1, '...', curr - 2, curr - 1, curr, curr + 1, curr + 2, '...', total];
+      }
+
+      function renderScreenshotPagination(containerId, summaryId, curr, totalPages, totalItems, startIdx, endIdx, onPageClick) {
+        const summaryEl = document.getElementById(summaryId);
+        if (summaryEl) {
+          summaryEl.textContent = totalItems > 0 ? `${(startIdx + 1).toLocaleString()}-${endIdx.toLocaleString()} of ${totalItems.toLocaleString()}` : '0-0 of 0';
+        }
+
+        const btnContainer = document.getElementById(containerId);
+        if (!btnContainer) return;
+        btnContainer.innerHTML = '';
+
+        const backBtn = document.createElement('button');
+        backBtn.type = 'button';
+        backBtn.disabled = curr <= 1;
+        backBtn.innerHTML = '<span class="text-sm leading-none">&lsaquo;</span><span>Back</span>';
+        backBtn.className = curr <= 1
+          ? 'h-9 px-3.5 rounded-lg border border-gray-200 bg-white text-gray-300 text-xs font-medium flex items-center gap-1.5 cursor-not-allowed select-none'
+          : 'h-9 px-3.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer';
+        if (curr > 1) backBtn.onclick = () => onPageClick(curr - 1);
+        btnContainer.appendChild(backBtn);
+
+        buildPageList(curr, totalPages).forEach((p) => {
+          if (p === '...') {
+            const dots = document.createElement('span');
+            dots.textContent = '⋯';
+            dots.className = 'w-9 h-9 rounded-lg border border-gray-200 bg-white text-gray-500 text-xs font-bold flex items-center justify-center select-none';
+            btnContainer.appendChild(dots);
+          } else {
+            const numBtn = document.createElement('button');
+            numBtn.type = 'button';
+            numBtn.textContent = String(p);
+            const isActive = p === curr;
+            numBtn.className = isActive
+              ? 'w-9 h-9 rounded-lg bg-black text-white border border-black text-xs font-bold flex items-center justify-center shadow-2xs'
+              : 'w-9 h-9 rounded-lg bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer';
+            if (!isActive) numBtn.onclick = () => onPageClick(p);
+            btnContainer.appendChild(numBtn);
+          }
+        });
+
+        const nextBtn = document.createElement('button');
+        nextBtn.type = 'button';
+        nextBtn.disabled = curr >= totalPages;
+        nextBtn.innerHTML = '<span>Next</span><span class="text-sm leading-none">&rsaquo;</span>';
+        nextBtn.className = curr >= totalPages
+          ? 'h-9 px-3.5 rounded-lg border border-gray-200 bg-white text-gray-300 text-xs font-medium flex items-center gap-1.5 cursor-not-allowed select-none'
+          : 'h-9 px-3.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer';
+        if (curr < totalPages) nextBtn.onclick = () => onPageClick(curr + 1);
+        btnContainer.appendChild(nextBtn);
+      }
+
+      window.selectAuditLogBucket = function (bucket, btnEl) {
+        activeBucket = bucket || 'all';
+        document.querySelectorAll('.audit-bucket-tab').forEach((b) => {
+          b.className = 'audit-bucket-tab px-4 py-2 text-xs font-semibold rounded-xl bg-[#F7F9F7] text-[#4F695D] hover:text-[#12372C] border border-[#DCE5DF]';
+        });
+        if (btnEl) {
+          btnEl.className = 'audit-bucket-tab px-4 py-2 text-xs font-black rounded-xl bg-[#1B4D3E] text-white';
+        }
+        window.applyAuditLogsPagination(1);
+      };
+
+      window.changeAuditLogsPageSize = function (val) {
+        pageSize = parseInt(val, 10) || 20;
+        window.applyAuditLogsPagination(1);
+      };
+
+      window.applyAuditLogsPagination = function (targetPage) {
+        const table = document.getElementById('systemAuditLogsTable');
+        if (!table) return;
+
+        const allRows = Array.from(table.querySelectorAll('tbody tr.audit-log-row'));
+        const searchInput = document.getElementById('auditLogSearchInput');
+        const q = (searchInput ? searchInput.value : '').trim().toLowerCase();
+
+        const matchedRows = allRows.filter((row) => {
+          const rowBucket = row.getAttribute('data-bucket') || 'operations';
+          if (activeBucket !== 'all' && rowBucket !== activeBucket) return false;
+
+          const hay = (row.getAttribute('data-search') || row.innerText || '').toLowerCase();
+          if (q && !hay.includes(q)) return false;
+
+          return true;
+        });
+
+        const total = matchedRows.length;
+        const totalPages = Math.max(1, Math.ceil(total / pageSize));
+        currentPage = Math.max(1, Math.min(targetPage || currentPage, totalPages));
+
+        const startIdx = (currentPage - 1) * pageSize;
+        const endIdx = Math.min(startIdx + pageSize, total);
+
+        allRows.forEach((r) => r.classList.add('pg-hidden'));
+        matchedRows.slice(startIdx, endIdx).forEach((r) => r.classList.remove('pg-hidden'));
+
+        renderScreenshotPagination('auditLogsPaginationButtons', 'auditLogsPaginationSummary', currentPage, totalPages, total, startIdx, endIdx, window.applyAuditLogsPagination);
+      };
+
+      function initAuditPaginationBindings() {
+        const searchInput = document.getElementById('auditLogSearchInput');
+        if (searchInput && !searchInput.dataset.boundAudit) {
+          searchInput.dataset.boundAudit = '1';
+          searchInput.addEventListener('input', function () {
+            window.applyAuditLogsPagination(1);
+          });
+        }
+        window.applyAuditLogsPagination(1);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initAuditPaginationBindings);
+      } else {
+        initAuditPaginationBindings();
+      }
+      setTimeout(initAuditPaginationBindings, 50);
+    })();
+  </script>
+{% endblock %}

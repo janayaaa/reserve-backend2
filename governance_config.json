@@ -1,0 +1,7 @@
+{
+  "strike_limit": 3,
+  "radius_km": 5.0,
+  "free_cap": 10,
+  "commission_pct": 10.0,
+  "premium_monthly_price": 399.0
+}

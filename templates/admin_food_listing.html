@@ -1,0 +1,617 @@
+{% extends 'base_admin.html' %}
+
+{% block title %}ReServe Admin - Food Listing{% endblock %}
+
+{% block content %}
+  <style>
+    tr.pg-hidden { display: none !important; }
+  </style>
+
+  <!-- Page Header -->
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h2 class="text-2xl font-bold text-[#12372C] tracking-tight">Food Listing &amp; Merchant Management</h2>
+      <p class="text-xs text-[#4F695D] mt-0.5">Monitor active produce listings, TTT expiry windows, and partner merchant storefronts</p>
+    </div>
+    {% if selected_merch_id %}
+      <a href="/food-listing/" data-spa-link="true" class="bg-[#1B4D3E] text-white text-xs font-semibold px-4 py-2 rounded-xl shadow-xs hover:bg-[#12372C] transition-colors">
+        ✕ Clear Merchant Filter (Showing MID-{{ selected_merch_id }})
+      </a>
+    {% endif %}
+  </div>
+
+  <!-- Mobile-Schema KPI Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+    <div class="bg-[#1B4D3E] border border-[#1B4D3E] p-4 rounded-2xl text-white shadow-xs flex items-center gap-3.5">
+      <div class="w-11 h-11 rounded-full bg-[#3A826D] flex items-center justify-center shrink-0">
+        <i data-lucide="utensils" class="w-5 h-5 text-white"></i>
+      </div>
+      <div>
+        <p class="text-[11px] text-white/80">Active Listings</p>
+        <h3 id="activeListingsBadge" class="text-2xl font-bold leading-tight mt-0.5">{{ active_listings_count }}</h3>
+      </div>
+    </div>
+
+    <div class="bg-white border border-[#DCE5DF] p-4 rounded-2xl shadow-2xs flex items-center gap-3.5">
+      <div class="w-11 h-11 rounded-full bg-[#E8EFEA] text-[#1B4D3E] flex items-center justify-center shrink-0">
+        <i data-lucide="store" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <p class="text-[11px] text-[#4F695D]">Active Stores</p>
+        <h3 class="text-2xl font-bold text-[#12372C] leading-tight mt-0.5">{{ active_stores_count }}</h3>
+      </div>
+    </div>
+
+    <div class="bg-[#E7EEE9] border border-[#D5E3D9] p-4 rounded-2xl shadow-2xs flex items-center gap-3.5">
+      <div class="w-11 h-11 rounded-full bg-white text-[#1B4D3E] flex items-center justify-center shrink-0">
+        <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <p class="text-[11px] text-[#4F695D]">Completed Pickups</p>
+        <h3 class="text-2xl font-bold text-[#1B4D3E] leading-tight mt-0.5">{{ claimed_produce_count }}</h3>
+      </div>
+    </div>
+
+    <div class="bg-white border border-[#DCE5DF] p-4 rounded-2xl shadow-2xs flex items-center gap-3.5">
+      <div class="w-11 h-11 rounded-full bg-[#FBE4E1] text-[#B3261E] flex items-center justify-center shrink-0">
+        <i data-lucide="flag" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <p class="text-[11px] text-[#4F695D]">Flagged / Expired</p>
+        <h3 id="flaggedCountBadge" class="text-2xl font-bold text-[#B3261E] leading-tight mt-0.5">{{ flagged_listings_count }}</h3>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search & Filter Toolbar -->
+  <div class="bg-white p-3.5 rounded-2xl border border-[#DCE5DF] shadow-2xs">
+    <div class="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
+      <div class="flex items-center gap-2 bg-[#F7F9F7] px-3 py-2 rounded-xl border border-[#DCE5DF] text-xs flex-1">
+        <i data-lucide="calendar" class="w-4 h-4 text-[#1B4D3E] shrink-0"></i>
+        <span class="font-semibold text-[#12372C] shrink-0">Date Range:</span>
+        <input type="text" id="foodListingDateInput" class="date-range-picker w-full bg-transparent font-medium text-[#12372C] focus:outline-none text-xs" placeholder="Filter by date posted...">
+        <button onclick="clearCalendarFilter(); setTimeout(() => window.applyFoodListingPagination(1), 60);" class="text-[#4F695D] hover:text-[#B3261E] font-bold px-1" title="Clear Filter">✕</button>
+      </div>
+
+      <select id="foodListingSortSelect" onchange="triggerSortByCriteria(this); setTimeout(() => window.applyFoodListingPagination(1), 60);" class="px-3.5 py-2.5 bg-[#F7F9F7] text-[#12372C] border border-[#DCE5DF] rounded-xl text-xs font-semibold focus:outline-none focus:border-[#1B4D3E] cursor-pointer">
+        <option value="">Sort By...</option>
+        <option value="name-asc">Item Name (A–Z)</option>
+        <option value="name-desc">Item Name (Z–A)</option>
+        <option value="date-desc">Expiry Date (Newest)</option>
+        <option value="date-asc">Expiry Date (Oldest)</option>
+      </select>
+
+      <div class="relative flex-1">
+        <i data-lucide="search" class="w-4 h-4 text-[#4F695D] absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+        <input type="text" id="foodListingSearchInput" placeholder="Search food item, category, or establishment..." class="w-full pl-10 pr-4 py-2.5 bg-[#F7F9F7] rounded-xl text-xs border border-[#DCE5DF] text-[#12372C] placeholder-[#4F695D]/70 focus:outline-none focus:border-[#1B4D3E] focus:bg-white transition-all">
+      </div>
+    </div>
+  </div>
+
+  <!-- Category Bucket Tabs -->
+  <div class="flex gap-2 border-b border-[#DCE5DF] pb-1 overflow-x-auto">
+    <button onclick="window.selectListingBucket('all', this)" class="listing-bucket-tab px-5 py-2.5 text-xs font-black rounded-2xl bg-white text-[#1B4D3E] shadow-sm border-b-2 border-[#1B4D3E]">
+      All Listings ({{ listings|length }})
+    </button>
+    <button onclick="window.selectListingBucket('active', this)" class="listing-bucket-tab px-5 py-2.5 text-xs font-bold rounded-2xl text-gray-500 hover:text-[#1B4D3E]">
+      Active Listings ({{ active_listings_count }})
+    </button>
+    <button onclick="window.selectListingBucket('flagged_expired', this)" class="listing-bucket-tab px-5 py-2.5 text-xs font-bold rounded-2xl text-gray-500 hover:text-rose-600">
+      Flagged &amp; Expired ({{ flagged_listings_count }})
+    </button>
+  </div>
+
+  <!-- Live Listings Table (20 Rows Per Page Default) -->
+  <div class="bg-white rounded-2xl shadow-2xs overflow-hidden border border-[#DCE5DF]">
+    <div class="overflow-x-auto">
+      <table id="foodListingsTable" class="user-role-table w-full text-left text-xs min-w-[760px]">
+        <thead class="bg-[#F3F6F4] text-[#12372C] font-semibold uppercase tracking-wider text-[10px] border-b border-[#DCE5DF]">
+          <tr>
+            <th class="p-3.5">Listing ID</th>
+            <th class="p-3.5">Food Item &amp; Photo</th>
+            <th class="p-3.5">Establishment</th>
+            <th class="p-3.5">Rescue Pricing</th>
+            <th class="p-3.5">Available Stock</th>
+            <th class="p-3.5">Expiry Date &amp; Time</th>
+            <th class="p-3.5">Status</th>
+            <th class="p-3.5">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-[#DCE5DF]">
+          {% for item in listings %}
+          <tr id="row-{{ item.id }}"
+              class="hover:bg-[#F7F9F7] transition-colors listing-row"
+              data-bucket="{{ item.bucket }}"
+              data-date="{{ item.date }}"
+              data-search="{{ item.id|lower }} {{ item.title|lower }} {{ item.establishment|lower }} {{ item.category|lower }}"
+              data-status="{{ item.status|lower }}">
+            <td class="p-3.5 font-mono font-semibold text-[#1B4D3E]">{{ item.id }}</td>
+            <td class="p-3.5">
+              <div class="flex items-center gap-3">
+                <img src="{{ item.image_url|default:'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=200&q=80' }}"
+                     alt="{{ item.title }}"
+                     onerror="this.src='https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=200&q=80'"
+                     class="w-11 h-11 rounded-xl object-cover border border-[#DCE5DF] shrink-0 bg-[#F7F9F7]">
+                <div>
+                  <span class="font-semibold text-[#12372C] block text-xs">{{ item.title }}</span>
+                  <span class="text-[10px] text-[#4F695D]">{{ item.category }}</span>
+                </div>
+              </div>
+            </td>
+            <td class="p-3.5 text-[#12372C] font-medium">{{ item.establishment }}</td>
+            <td class="p-3.5">
+              <span class="text-[#4F695D] line-through text-[10px] mr-1">{{ item.orig_price }}</span>
+              <span class="font-bold text-[#1B4D3E] text-xs">{{ item.disc_price }}</span>
+            </td>
+            <td class="p-3.5 font-semibold text-[#12372C]">{{ item.quantity }}</td>
+            <td class="p-3.5 text-[#A94A3A] font-medium">{{ item.expiry }}</td>
+            <td class="p-3.5 status-cell">
+              {% if 'flag' in item.status|lower %}
+                <span class="bg-[#FBE4E1] text-[#B3261E] px-2.5 py-1 rounded-lg text-[10px] font-semibold">{{ item.status }}</span>
+              {% elif 'expir' in item.status|lower %}
+                <span class="bg-[#FEF3C7] text-[#B45309] px-2.5 py-1 rounded-lg text-[10px] font-semibold">{{ item.status }}</span>
+              {% else %}
+                <span class="bg-[#E4F0E8] text-[#1F6B52] px-2.5 py-1 rounded-lg text-[10px] font-semibold">{{ item.status }}</span>
+              {% endif %}
+            </td>
+            <td class="p-3.5">
+              <div class="flex items-center gap-2">
+                <button type="button"
+                        onclick="openFoodDetailModal(this)"
+                        data-raw-id="{{ item.raw_id }}"
+                        data-id="{{ item.id }}"
+                        data-title="{{ item.title }}"
+                        data-desc="{{ item.description }}"
+                        data-qty="{{ item.quantity }}"
+                        data-orig="{{ item.orig_price }}"
+                        data-disc="{{ item.disc_price }}"
+                        data-date="{{ item.date }}"
+                        data-expiry="{{ item.expiry }}"
+                        data-temp="{{ item.temperature }}"
+                        data-merchant="{{ item.establishment }}"
+                        data-address="{{ item.address }}"
+                        data-img="{{ item.image_url|default:'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=400&q=80' }}"
+                        class="w-8 h-8 rounded-lg bg-[#F7F9F7] hover:bg-[#E8EFEA] border border-[#DCE5DF] text-[#1B4D3E] flex items-center justify-center transition-colors cursor-pointer"
+                        title="Inspect Listing">
+                  <i data-lucide="eye" class="w-4 h-4"></i>
+                </button>
+                <button type="button"
+                        onclick="removeFoodListing('{{ item.raw_id }}', 'row-{{ item.id }}'); setTimeout(() => window.applyFoodListingPagination(), 250);"
+                        class="w-8 h-8 rounded-lg bg-[#FDF3F2] hover:bg-[#FBE4E1] border border-[#E5B8B4] text-[#B3261E] flex items-center justify-center transition-colors cursor-pointer"
+                        title="Delete Listing">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr class="empty-row">
+            <td colspan="8" class="p-8 text-center text-[#4F695D] text-xs">No food listings posted in the database yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SCREENSHOT-MATCHED 20-ROW PAGINATION FOOTER -->
+    <div id="foodListingsPaginationBar" class="px-5 py-4 bg-white border-t border-[#E5E7EB]">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div id="foodListingsPaginationButtons" class="flex items-center gap-1.5 flex-wrap"></div>
+        <div class="flex items-center gap-2.5">
+          <span class="text-xs font-medium text-gray-700">Result per page</span>
+          <select id="foodListingsPageSizeSelect" onchange="window.changeFoodListingPageSize(this.value)" class="h-9 px-3 rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-800 focus:outline-none focus:border-gray-400 cursor-pointer">
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+      </div>
+      <div id="foodListingsPaginationSummary" class="mt-2.5 text-xs font-medium text-gray-600">0-0 of 0</div>
+    </div>
+  </div>
+
+  <!-- PARTNER MERCHANT PROFILES DIRECTORY (AT BOTTOM + EXPANDABLE VIA SEE ALL) -->
+  <div class="bg-white p-5 rounded-2xl border border-[#DCE5DF] shadow-2xs space-y-4">
+    <div class="flex items-center justify-between border-b border-[#DCE5DF] pb-3">
+      <div>
+        <h3 class="text-sm font-bold text-[#12372C]">Partner Merchant Storefronts</h3>
+        <p class="text-[11px] text-[#4F695D]">Click any merchant card to inspect their storefront rating, active listings, and transaction history</p>
+      </div>
+      {% if merchant_profiles|length > 4 %}
+      <button type="button" id="toggleAllMerchantsBtn" onclick="toggleSeeAllMerchants()" class="bg-[#E8EFEA] hover:bg-[#1B4D3E] text-[#1B4D3E] hover:text-white font-semibold text-xs px-4 py-2 rounded-xl transition-all">
+        See All ({{ merchant_profiles|length }})
+      </button>
+      {% endif %}
+    </div>
+
+    <div id="merchantProfilesGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      {% for mp in merchant_profiles %}
+      <div id="merchant-profile-card-{{ mp.merch_id }}"
+           onclick="openMerchantDirectoryProfile(this)"
+           data-id="{{ mp.merch_id }}"
+           data-id-label="{{ mp.id_label }}"
+           data-name="{{ mp.bus_name }}"
+           data-type="{{ mp.merch_type }}"
+           data-address="{{ mp.address }}"
+           data-contact="{{ mp.contact_person }}"
+           data-phone="{{ mp.phone }}"
+           data-hotline="{{ mp.hotline }}"
+           data-email="{{ mp.email }}"
+           data-status="{{ mp.status }}"
+           data-plan="{{ mp.plan_name }}"
+           data-wallet="{{ mp.wallet_bal }}"
+           data-expiry="{{ mp.expiry_date }}"
+           data-permit="{{ mp.permit_url }}"
+           data-active="{{ mp.active_count }}"
+           data-flagged="{{ mp.flagged_expired_count }}"
+           data-rating="{{ mp.avg_rating }}"
+           data-reviews="{{ mp.review_count }}"
+           data-items="{{ mp.items_json }}"
+           class="merchant-dir-card {% if forloop.counter > 4 %}hidden extra-merchant-card{% endif %} cursor-pointer group bg-[#F7F9F7] hover:bg-[#E8EFEA]/70 border border-[#DCE5DF] hover:border-[#3A826D] rounded-xl p-4 transition-all flex flex-col justify-between gap-3">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-10 h-10 rounded-xl bg-[#1B4D3E] text-white flex items-center justify-center font-bold text-sm shrink-0">
+              {{ mp.bus_name|slice:":1"|upper }}
+            </div>
+            <div class="min-w-0">
+              <h4 class="font-semibold text-[#12372C] text-xs truncate group-hover:text-[#1B4D3E]">{{ mp.bus_name }}</h4>
+              <p class="text-[10px] text-[#4F695D]">{{ mp.merch_type }} • {{ mp.id_label }}</p>
+              <p class="text-[10px] font-semibold text-amber-600 mt-0.5">★ {{ mp.avg_rating }} ({{ mp.review_count }} reviews)</p>
+            </div>
+          </div>
+          <span class="px-2 py-0.5 rounded-md text-[9px] font-semibold uppercase {% if mp.status == 'Active' %}bg-[#E4F0E8] text-[#1F6B52]{% else %}bg-[#FEF3C7] text-[#B45309]{% endif %}">
+            {{ mp.status }}
+          </span>
+        </div>
+
+        <div class="flex items-center justify-between pt-2.5 border-t border-[#DCE5DF] text-[10px] font-medium">
+          <span class="text-[#1F6B52] bg-[#E4F0E8] px-2.5 py-1 rounded-lg">
+            {{ mp.active_count }} Active Listing{{ mp.active_count|pluralize }}
+          </span>
+          <span class="text-[#4F695D]">
+            {{ mp.flagged_expired_count }} Flagged/Exp
+          </span>
+        </div>
+      </div>
+      {% empty %}
+      <p class="text-xs text-[#4F695D] col-span-full py-4 text-center">No merchants registered yet.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- 1. FOOD LISTING DETAIL MODAL (STICKY HEADER) -->
+  <div id="foodModal" class="modal-overlay hidden fixed inset-0 bg-[#12372C]/60 backdrop-blur-xs flex justify-center items-center z-50 p-4">
+    <div class="bg-[#F4F8F6] rounded-2xl w-full max-w-[560px] max-h-[92vh] overflow-y-auto shadow-2xl border border-[#DCE5DF] flex flex-col justify-between relative">
+      <div class="sticky top-0 z-30 bg-white px-6 py-4 border-b border-[#DCE5DF] flex justify-between items-center">
+        <div>
+          <h3 id="foodModalTitle" class="font-bold text-[#12372C] text-base">Food Item</h3>
+          <p class="text-[10px] text-[#4F695D]">Surplus Listing Inspection &amp; Compliance</p>
+        </div>
+        <button onclick="toggleModal('foodModal')" class="w-8 h-8 rounded-full bg-[#F4F8F6] hover:bg-[#E8EFEA] text-[#12372C] border border-[#DCE5DF] flex items-center justify-center font-bold text-xs cursor-pointer">✕</button>
+      </div>
+
+      <div class="p-5 space-y-4">
+        <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] grid grid-cols-1 sm:grid-cols-12 gap-4 items-start">
+          <div class="sm:col-span-5 w-full h-40 rounded-xl overflow-hidden border border-[#DCE5DF] bg-[#F7F9F7]">
+            <img id="foodModalImg" src="https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=400&q=80" alt="Food Photo" class="w-full h-full object-cover">
+          </div>
+
+          <div class="sm:col-span-7 space-y-2 text-xs">
+            <div>
+              <span class="text-[10px] font-semibold uppercase text-[#4F695D]">Description</span>
+              <p id="foodModalDesc" class="text-[11px] text-[#12372C] leading-relaxed mt-0.5">...</p>
+            </div>
+            <div class="pt-2 border-t border-[#DCE5DF] space-y-1.5 text-xs">
+              <p class="flex justify-between"><span class="text-[#4F695D]">Available Stock:</span> <strong id="foodModalQty" class="text-[#12372C]">...</strong></p>
+              <p class="flex justify-between"><span class="text-[#4F695D]">Original Price:</span> <span id="foodModalOrigPrice" class="text-[#4F695D] line-through">...</span></p>
+              <p class="flex justify-between"><span class="text-[#4F695D]">Rescue Price:</span> <strong id="foodModalDiscPrice" class="text-[#1B4D3E]">...</strong></p>
+              <p class="flex justify-between"><span class="text-[#4F695D]">Date Posted:</span> <span id="foodModalDate" class="text-[#12372C]">...</span></p>
+              <p class="flex justify-between"><span class="text-[#4F695D]">Expiry Window:</span> <strong id="foodModalExpiry" class="text-[#B3261E]">...</strong></p>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-[#E8EFEA] p-3.5 rounded-xl border border-[#DCE5DF] flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[#1B4D3E] shrink-0">
+            <i data-lucide="store" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h5 id="foodModalMerchant" class="font-bold text-[#12372C] text-xs">...</h5>
+            <p id="foodModalAddress" class="text-[11px] text-[#4F695D]">...</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-6 py-3.5 bg-white border-t border-[#DCE5DF] flex justify-end items-center gap-2.5">
+        <button onclick="flagFoodListingModal()" class="bg-[#FEF3C7] hover:bg-amber-200 text-[#B45309] font-semibold text-xs px-5 py-2.5 rounded-xl border border-amber-300 transition-all cursor-pointer">
+          Flag Listing
+        </button>
+        <button onclick="removeFoodListingModal(); setTimeout(() => window.applyFoodListingPagination(), 250);" class="bg-[#B3261E] hover:bg-rose-800 text-white font-semibold text-xs px-5 py-2.5 rounded-xl transition-all cursor-pointer">
+          Remove Listing
+        </button>
+      </div>
+      <input type="hidden" id="currentFoodRawId">
+      <input type="hidden" id="currentFoodRowId">
+    </div>
+  </div>
+
+  <!-- 2. CLICKABLE MERCHANT FULL PROFILE, LISTINGS & HISTORY MODAL (STICKY HEADER) -->
+  <div id="merchantDirectoryProfileModal" class="modal-overlay hidden fixed inset-0 bg-[#12372C]/60 backdrop-blur-xs flex justify-center items-center z-50 p-4">
+    <div class="bg-[#F4F8F6] rounded-2xl w-full max-w-[920px] max-h-[92vh] overflow-y-auto shadow-2xl border border-[#DCE5DF] flex flex-col justify-between relative">
+      <div class="sticky top-0 z-30 bg-white px-6 py-4 border-b border-[#DCE5DF] flex justify-between items-center">
+        <div class="flex items-center gap-3">
+          <div class="w-11 h-11 rounded-xl bg-[#1B4D3E] text-white flex items-center justify-center font-bold text-lg" id="mpModalInitial">M</div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 id="mpModalName" class="font-bold text-[#12372C] text-base">Merchant Name</h3>
+              <span id="mpModalRatingBadge" class="bg-[#FEF3C7] text-[#B45309] border border-amber-300 text-[10px] font-semibold px-2.5 py-0.5 rounded-lg">★ 5.0 (0)</span>
+            </div>
+            <p class="text-[11px] text-[#4F695D]" id="mpModalSub">MID-1 • Bakeshop</p>
+          </div>
+        </div>
+        <button onclick="closeModal('merchantDirectoryProfileModal')" class="w-8 h-8 rounded-full bg-[#F4F8F6] hover:bg-[#E8EFEA] text-[#12372C] border border-[#DCE5DF] flex items-center justify-center font-bold text-xs cursor-pointer">✕</button>
+      </div>
+
+      <div class="p-5 space-y-4 text-xs">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+          <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-1">
+            <span class="text-[10px] font-semibold uppercase text-[#4F695D]">Contact &amp; Location</span>
+            <p class="font-semibold text-[#12372C]" id="mpModalContact">...</p>
+            <p class="text-[#4F695D]" id="mpModalPhone">...</p>
+            <p class="text-[#3A826D] font-medium" id="mpModalEmail">...</p>
+            <p class="text-[#4F695D] text-[11px]" id="mpModalAddress">...</p>
+          </div>
+          <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-1.5">
+            <span class="text-[10px] font-semibold uppercase text-[#4F695D]">Storefront &amp; Wallet</span>
+            <p class="font-bold text-[#1B4D3E] text-sm">Wallet Balance: <span id="mpModalWallet">₱0.00</span></p>
+            <p class="text-[#4F695D]">Subscription Tier: <strong class="text-[#12372C]" id="mpModalPlan">Basic</strong></p>
+            <p class="text-[#4F695D]">Permit Expiry: <strong class="text-[#12372C]" id="mpModalExpiry">YYYY-MM-DD</strong></p>
+          </div>
+          <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] flex flex-col justify-between">
+            <div>
+              <span class="text-[10px] font-semibold uppercase text-[#4F695D]">Inventory Summary</span>
+              <p class="font-bold text-[#1F6B52] text-sm mt-1"><span id="mpModalActiveCount">0</span> Active Listings</p>
+              <p class="font-medium text-[#B3261E] text-xs"><span id="mpModalFlaggedCount">0</span> Flagged / Expired</p>
+            </div>
+            <button id="mpFilterPageBtn" class="mt-2 bg-[#3A826D] hover:bg-[#1B4D3E] text-white font-semibold text-xs py-2 px-3 rounded-xl transition-colors cursor-pointer">
+              Filter Table by This Merchant
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-3">
+          <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider">Merchant Food Listings</h4>
+          <div class="overflow-x-auto rounded-xl border border-[#DCE5DF]">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-[#F3F6F4] text-[#12372C] text-[10px] font-semibold uppercase border-b border-[#DCE5DF]">
+                <tr>
+                  <th class="p-2.5">ID</th>
+                  <th class="p-2.5">Food Item &amp; Photo</th>
+                  <th class="p-2.5">Price</th>
+                  <th class="p-2.5">Qty</th>
+                  <th class="p-2.5">Expiry Date &amp; Time</th>
+                  <th class="p-2.5">Status</th>
+                </tr>
+              </thead>
+              <tbody id="mpModalListingsBody" class="divide-y divide-[#DCE5DF]"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-3">
+          <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider">Order &amp; Transaction History</h4>
+          <div class="overflow-x-auto rounded-xl border border-[#DCE5DF]">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-[#F3F6F4] text-[#12372C] text-[10px] font-semibold uppercase border-b border-[#DCE5DF]">
+                <tr>
+                  <th class="p-2.5">Order ID</th>
+                  <th class="p-2.5">Item</th>
+                  <th class="p-2.5">Buyer</th>
+                  <th class="p-2.5">Date</th>
+                  <th class="p-2.5">Amount</th>
+                  <th class="p-2.5">Status</th>
+                  <th class="p-2.5">Receipt</th>
+                </tr>
+              </thead>
+              <tbody id="mpModalTransactionsBody" class="divide-y divide-[#DCE5DF]"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-6 py-3.5 bg-white border-t border-[#DCE5DF] flex justify-end">
+        <button onclick="closeModal('merchantDirectoryProfileModal')" class="bg-[#1B4D3E] hover:bg-[#12372C] text-white font-semibold text-xs px-7 py-2.5 rounded-xl transition-colors cursor-pointer">
+          Close Storefront
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- IMMEDIATE 20-ROW FOOD LISTING PAGINATION SCRIPT -->
+  <script>
+    (function () {
+      let currentPage = 1;
+      let pageSize = 20;
+      let activeBucket = 'all';
+      let isPaginating = false;
+
+      function buildPageList(curr, total) {
+        if (total <= 9) {
+          return Array.from({ length: total }, (_, i) => i + 1);
+        }
+        if (curr <= 6) {
+          return [1, 2, 3, 4, 5, 6, 7, 8, '...', total];
+        }
+        if (curr >= total - 5) {
+          return [1, '...', total - 7, total - 6, total - 5, total - 4, total - 3, total - 2, total - 1, total];
+        }
+        return [1, '...', curr - 2, curr - 1, curr, curr + 1, curr + 2, '...', total];
+      }
+
+      function renderScreenshotPagination(containerId, summaryId, curr, totalPages, totalItems, startIdx, endIdx, onPageClick) {
+        const summaryEl = document.getElementById(summaryId);
+        if (summaryEl) {
+          summaryEl.textContent =
+            totalItems > 0
+              ? `${(startIdx + 1).toLocaleString()}-${endIdx.toLocaleString()} of ${totalItems.toLocaleString()}`
+              : '0-0 of 0';
+        }
+
+        const btnContainer = document.getElementById(containerId);
+        if (!btnContainer) return;
+        btnContainer.innerHTML = '';
+
+        const backBtn = document.createElement('button');
+        backBtn.type = 'button';
+        backBtn.disabled = curr <= 1;
+        backBtn.innerHTML = '<span class="text-sm leading-none">&lsaquo;</span><span>Back</span>';
+        backBtn.className =
+          curr <= 1
+            ? 'h-9 px-3.5 rounded-lg border border-gray-200 bg-white text-gray-300 text-xs font-medium flex items-center gap-1.5 cursor-not-allowed select-none'
+            : 'h-9 px-3.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer';
+        if (curr > 1) backBtn.onclick = () => onPageClick(curr - 1);
+        btnContainer.appendChild(backBtn);
+
+        const pages = buildPageList(curr, totalPages);
+        pages.forEach((p) => {
+          if (p === '...') {
+            const dots = document.createElement('span');
+            dots.textContent = '⋯';
+            dots.className = 'w-9 h-9 rounded-lg border border-gray-200 bg-white text-gray-500 text-xs font-bold flex items-center justify-center select-none';
+            btnContainer.appendChild(dots);
+          } else {
+            const numBtn = document.createElement('button');
+            numBtn.type = 'button';
+            numBtn.textContent = String(p);
+            const isActive = p === curr;
+            numBtn.className = isActive
+              ? 'w-9 h-9 rounded-lg bg-black text-white border border-black text-xs font-bold flex items-center justify-center shadow-2xs'
+              : 'w-9 h-9 rounded-lg bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer';
+            if (!isActive) numBtn.onclick = () => onPageClick(p);
+            btnContainer.appendChild(numBtn);
+          }
+        });
+
+        const nextBtn = document.createElement('button');
+        nextBtn.type = 'button';
+        nextBtn.disabled = curr >= totalPages;
+        nextBtn.innerHTML = '<span>Next</span><span class="text-sm leading-none">&rsaquo;</span>';
+        nextBtn.className =
+          curr >= totalPages
+            ? 'h-9 px-3.5 rounded-lg border border-gray-200 bg-white text-gray-300 text-xs font-medium flex items-center gap-1.5 cursor-not-allowed select-none'
+            : 'h-9 px-3.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer';
+        if (curr < totalPages) nextBtn.onclick = () => onPageClick(curr + 1);
+        btnContainer.appendChild(nextBtn);
+      }
+
+      window.selectListingBucket = function (bucket, btnEl) {
+        activeBucket = bucket || 'all';
+        document.querySelectorAll('.listing-bucket-tab').forEach((b) => {
+          b.className = 'listing-bucket-tab px-5 py-2.5 text-xs font-bold rounded-2xl text-gray-500 hover:text-[#1B4D3E]';
+        });
+        if (btnEl) {
+          btnEl.className = 'listing-bucket-tab px-5 py-2.5 text-xs font-black rounded-2xl bg-white text-[#1B4D3E] shadow-sm border-b-2 border-[#1B4D3E]';
+        }
+        window.applyFoodListingPagination(1);
+      };
+
+      window.changeFoodListingPageSize = function (val) {
+        pageSize = parseInt(val, 10) || 20;
+        window.applyFoodListingPagination(1);
+      };
+
+      window.applyFoodListingPagination = function (targetPage) {
+        if (isPaginating) return;
+        isPaginating = true;
+        try {
+          const table = document.getElementById('foodListingsTable');
+          if (!table) return;
+
+          const allRows = Array.from(table.querySelectorAll('tbody tr.listing-row'));
+          const searchInput = document.getElementById('foodListingSearchInput');
+          const dateInput = document.getElementById('foodListingDateInput');
+          const q = (searchInput ? searchInput.value : '').trim().toLowerCase();
+          const dateVal = (dateInput ? dateInput.value : '').trim();
+
+          const matchedRows = allRows.filter((row) => {
+            const rowBucket = row.getAttribute('data-bucket') || 'active';
+            if (activeBucket !== 'all' && rowBucket !== activeBucket) return false;
+
+            const hay = (row.getAttribute('data-search') || row.innerText || '').toLowerCase();
+            if (q && !hay.includes(q)) return false;
+
+            if (dateVal) {
+              const rowDate = row.getAttribute('data-date') || '';
+              const parts = dateVal.split(' to ');
+              if (parts.length === 2) {
+                if (rowDate < parts[0].trim() || rowDate > parts[1].trim()) return false;
+              } else if (rowDate !== dateVal) {
+                return false;
+              }
+            }
+            return true;
+          });
+
+          const total = matchedRows.length;
+          const totalPages = Math.max(1, Math.ceil(total / pageSize));
+          currentPage = Math.max(1, Math.min(targetPage || currentPage, totalPages));
+
+          const startIdx = (currentPage - 1) * pageSize;
+          const endIdx = Math.min(startIdx + pageSize, total);
+
+          allRows.forEach((r) => {
+            r.style.display = '';
+            r.classList.add('pg-hidden');
+          });
+          matchedRows.slice(startIdx, endIdx).forEach((r) => r.classList.remove('pg-hidden'));
+
+          renderScreenshotPagination(
+            'foodListingsPaginationButtons',
+            'foodListingsPaginationSummary',
+            currentPage,
+            totalPages,
+            total,
+            startIdx,
+            endIdx,
+            window.applyFoodListingPagination
+          );
+        } finally {
+          isPaginating = false;
+        }
+      };
+
+      function initFoodListingPaginationBindings() {
+        const searchInput = document.getElementById('foodListingSearchInput');
+        if (searchInput && !searchInput.dataset.boundFlPg) {
+          searchInput.dataset.boundFlPg = '1';
+          searchInput.addEventListener('input', function () {
+            setTimeout(() => window.applyFoodListingPagination(1), 20);
+          });
+        }
+        const dateInput = document.getElementById('foodListingDateInput');
+        if (dateInput && !dateInput.dataset.boundFlPg) {
+          dateInput.dataset.boundFlPg = '1';
+          dateInput.addEventListener('change', function () {
+            setTimeout(() => window.applyFoodListingPagination(1), 60);
+          });
+        }
+        const tbody = document.querySelector('#foodListingsTable tbody');
+        if (tbody && !tbody.dataset.boundObs) {
+          tbody.dataset.boundObs = '1';
+          const obs = new MutationObserver(() => {
+            if (!isPaginating) window.applyFoodListingPagination(currentPage);
+          });
+          obs.observe(tbody, { childList: true });
+        }
+        window.applyFoodListingPagination(1);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initFoodListingPaginationBindings);
+      } else {
+        initFoodListingPaginationBindings();
+      }
+      setTimeout(initFoodListingPaginationBindings, 50);
+    })();
+  </script>
+{% endblock %}

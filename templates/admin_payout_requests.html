@@ -1,0 +1,506 @@
+{% extends 'base_admin.html' %}
+
+{% block title %}ReServe Admin - Automated Payout Ledger{% endblock %}
+
+{% block content %}
+  <style>
+    tr.pg-hidden { display: none !important; }
+  </style>
+
+  <div>
+    <h2 class="text-2xl font-bold text-[#12372C] tracking-tight">Merchant Payout &amp; Settlement Records</h2>
+    <p class="text-xs text-[#4F695D] mt-0.5">Merchant disbursements, transaction tracking, and commission reconciliation</p>
+  </div>
+
+  <!-- Mobile-Schema KPI Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+    <div class="bg-[#1B4D3E] border border-[#1B4D3E] p-4 rounded-2xl text-white shadow-xs flex items-center gap-3.5">
+      <div class="w-11 h-11 rounded-full bg-[#3A826D] flex items-center justify-center shrink-0">
+        <i data-lucide="wallet" class="w-5 h-5 text-white"></i>
+      </div>
+      <div>
+        <p class="text-[11px] text-white/80">Total Disbursements</p>
+        <h3 id="poStatTotal" class="text-2xl font-bold leading-tight mt-0.5">{{ total_requests }}</h3>
+      </div>
+    </div>
+
+    <div class="bg-[#E7EEE9] border border-[#D5E3D9] p-4 rounded-2xl shadow-2xs flex items-center gap-3.5">
+      <div class="w-11 h-11 rounded-full bg-white text-[#1B4D3E] flex items-center justify-center shrink-0">
+        <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <p class="text-[11px] text-[#4F695D]">Auto-Settled via Xendit</p>
+        <h3 id="poStatSettled" class="text-2xl font-bold text-[#1B4D3E] leading-tight mt-0.5">{{ successful_count }}</h3>
+      </div>
+    </div>
+
+    <div class="bg-white border border-[#DCE5DF] p-4 rounded-2xl shadow-2xs flex items-center gap-3.5">
+      <div class="w-11 h-11 rounded-full bg-[#FEF3C7] text-[#B45309] flex items-center justify-center shrink-0">
+        <i data-lucide="clock" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <p class="text-[11px] text-[#4F695D]">Processing / Queued</p>
+        <h3 id="poStatPending" class="text-2xl font-bold text-[#B45309] leading-tight mt-0.5">{{ pending_approval_count }}</h3>
+      </div>
+    </div>
+
+    <div class="bg-white border border-[#DCE5DF] p-4 rounded-2xl shadow-2xs flex items-center gap-3.5">
+      <div class="w-11 h-11 rounded-full bg-[#E8EFEA] text-[#1B4D3E] flex items-center justify-center shrink-0">
+        <i data-lucide="shield-check" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <p class="text-[11px] text-[#4F695D]">Gateway Mode</p>
+        <h3 id="poStatRejected" class="text-base font-bold text-[#12372C] leading-tight mt-1">Xendit v2 Auto-Payout</h3>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search, Date Range & Sort Toolbar -->
+  <div class="bg-white p-3.5 rounded-2xl border border-[#DCE5DF] shadow-2xs">
+    <div class="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
+      <div class="flex items-center gap-2 bg-[#F7F9F7] px-3 py-2 rounded-xl border border-[#DCE5DF] text-xs flex-1">
+        <i data-lucide="calendar" class="w-4 h-4 text-[#1B4D3E] shrink-0"></i>
+        <span class="font-semibold text-[#12372C] shrink-0">Date Range:</span>
+        <input type="text" id="payoutDateInput" class="date-range-picker w-full bg-transparent font-medium text-[#12372C] focus:outline-none text-xs" placeholder="Filter by disbursement date...">
+        <button onclick="clearCalendarFilter(); setTimeout(() => window.applyPayoutsPagination(1), 60);" class="text-[#4F695D] hover:text-[#B3261E] font-bold px-1" title="Clear Filter">✕</button>
+      </div>
+
+      <select id="payoutSortSelect" onchange="triggerSortByCriteria(this); setTimeout(() => window.applyPayoutsPagination(1), 60);" class="px-3.5 py-2.5 bg-[#F7F9F7] text-[#12372C] border border-[#DCE5DF] rounded-xl text-xs font-semibold focus:outline-none focus:border-[#1B4D3E] cursor-pointer">
+        <option value="">Sort By...</option>
+        <option value="date-desc">Date (Newest First)</option>
+        <option value="date-asc">Date (Oldest First)</option>
+        <option value="name-asc">Merchant Name (A–Z)</option>
+        <option value="name-desc">Merchant Name (Z–A)</option>
+        <option value="status-asc">Status</option>
+      </select>
+
+      <div class="relative flex-1">
+        <i data-lucide="search" class="w-4 h-4 text-[#4F695D] absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+        <input type="text" id="payoutSearchInput" placeholder="Search payout ID, merchant, GCash/Maya #, or Xendit ref #..." class="w-full pl-10 pr-4 py-2.5 bg-[#F7F9F7] rounded-xl text-xs border border-[#DCE5DF] text-[#12372C] placeholder-[#4F695D]/70 focus:outline-none focus:border-[#1B4D3E] focus:bg-white transition-all">
+      </div>
+    </div>
+  </div>
+
+  <!-- Live Payouts Table (View-Only Automated Xendit Ledger with 20-Row Pagination) -->
+  <div class="bg-white rounded-2xl shadow-2xs overflow-hidden border border-[#DCE5DF]">
+    <div class="overflow-x-auto">
+      <table id="payoutsTable" class="user-role-table w-full text-left text-xs min-w-[760px]">
+        <thead class="bg-[#F3F6F4] text-[#12372C] font-semibold uppercase tracking-wider text-[10px] border-b border-[#DCE5DF]">
+          <tr>
+            <th class="p-3.5">Payout ID</th>
+            <th class="p-3.5">Establishment &amp; Fee Policy</th>
+            <th class="p-3.5">Disbursement E-Wallet</th>
+            <th class="p-3.5">Date Disbursed</th>
+            <th class="p-3.5">Remaining Wallet</th>
+            <th class="p-3.5">Gross (Net Disbursed)</th>
+            <th class="p-3.5">Xendit Ref / Payout ID</th>
+            <th class="p-3.5">Status</th>
+            <th class="p-3.5">Receipt</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-[#DCE5DF]">
+          {% for po in payouts %}
+          <tr id="po-row-{{ po.id }}"
+              class="hover:bg-[#F7F9F7] transition-colors payout-data-row"
+              data-date="{{ po.date|slice:':10' }}"
+              data-status="{{ po.status|lower }}"
+              data-search="{{ po.id|lower }} {{ po.merchant_name|lower }} {{ po.tier_name|lower }} {{ po.channel|lower }} {{ po.account_number|lower }} {{ po.account_name|lower }} {{ po.reference_number|lower }} {{ po.status|lower }}">
+            <td class="p-3.5 font-mono font-semibold text-[#1B4D3E]">{{ po.id }}</td>
+            <td class="p-3.5">
+              <span class="font-semibold text-[#12372C] block">{{ po.merchant_name }}</span>
+              {% if 'Pro Tier' in po.tier_name %}
+                <span class="bg-[#FEF3C7] text-[#B45309] border border-amber-300 px-2 py-0.5 rounded text-[9px] font-bold inline-block mt-0.5">{{ po.tier_name }}</span>
+              {% else %}
+                <span class="bg-[#F8FAFC] text-[#475569] border border-[#E2E8F0] px-2 py-0.5 rounded text-[9px] font-semibold inline-block mt-0.5">{{ po.tier_name }}</span>
+              {% endif %}
+            </td>
+            <td class="p-3.5">
+              <span class="font-semibold text-[#12372C]">{{ po.channel }}: {{ po.account_number }}</span>
+              <span class="text-[10px] text-[#4F695D] block">{{ po.account_name }}</span>
+            </td>
+            <td class="p-3.5 text-[#4F695D]">{{ po.date }}</td>
+            <td class="p-3.5 text-[#12372C] font-semibold">{{ po.current_balance }}</td>
+            <td class="p-3.5">
+              <span class="font-bold text-[#3A826D] text-xs block">{{ po.requested_amount }}</span>
+            </td>
+            <td class="p-3.5 font-mono text-[11px] font-semibold text-[#1B4D3E] ref-cell">{{ po.reference_number|default:"Recorded" }}</td>
+            <td class="p-3.5 status-cell">
+              <span class="bg-[#E4F0E8] text-[#1F6B52] px-2.5 py-1 rounded-lg text-[10px] font-semibold">{{ po.status|default:"Settled" }}</span>
+            </td>
+            <td class="p-3.5">
+              <button type="button"
+                      id="po-btn-{{ po.id }}"
+                      onclick="window.openPayoutReceiptModal(this)"
+                      data-raw-id="{{ po.raw_id }}"
+                      data-id="{{ po.id }}"
+                      data-merchant-id="{{ po.merchant_id }}"
+                      data-merchant="{{ po.merchant_name }}"
+                      data-contact="{{ po.contact_person }}"
+                      data-phone="{{ po.merchant_phone }}"
+                      data-email="{{ po.merchant_email }}"
+                      data-tier="{{ po.tier_name }}"
+                      data-channel="{{ po.channel }}"
+                      data-account-num="{{ po.account_number }}"
+                      data-account-name="{{ po.account_name }}"
+                      data-date="{{ po.date }}"
+                      data-balance="{{ po.current_balance }}"
+                      data-requested="{{ po.requested_amount }}"
+                      data-fee="{{ po.fee_deducted }}"
+                      data-net="{{ po.net_payout }}"
+                      data-ref="{{ po.reference_number|default:'Recorded' }}"
+                      data-status="{{ po.status|default:'Settled' }}"
+                      class="flex items-center gap-1.5 bg-[#E8EFEA] hover:bg-[#1B4D3E] text-[#1B4D3E] hover:text-white border border-[#DCE5DF] px-3.5 py-2 rounded-xl text-[11px] font-semibold transition-colors cursor-pointer">
+                <i data-lucide="eye" class="w-3.5 h-3.5"></i> View Receipt
+              </button>
+            </td>
+          </tr>
+          {% empty %}
+          <tr class="empty-row"><td colspan="9" class="p-8 text-center text-[#4F695D] text-xs">No automated Xendit payouts recorded yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SCREENSHOT-MATCHED 20-ROW PAGINATION FOOTER -->
+    <div id="payoutsPaginationBar" class="px-5 py-4 bg-white border-t border-[#E5E7EB]">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div id="payoutsPaginationButtons" class="flex items-center gap-1.5 flex-wrap"></div>
+        <div class="flex items-center gap-2.5">
+          <span class="text-xs font-medium text-gray-700">Result per page</span>
+          <select id="payoutsPageSizeSelect" onchange="window.changePayoutsPageSize(this.value)" class="h-9 px-3 rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-800 focus:outline-none focus:border-gray-400 cursor-pointer">
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+      </div>
+      <div id="payoutsPaginationSummary" class="mt-2.5 text-xs font-medium text-gray-600">0-0 of 0</div>
+    </div>
+  </div>
+
+  <!-- VIEW-ONLY AUTOMATED XENDIT DISBURSEMENT RECEIPT MODAL (STICKY HEADER) -->
+  <div id="payoutApprovalModal" class="modal-overlay hidden fixed inset-0 bg-[#12372C]/60 backdrop-blur-xs flex justify-center items-center z-50 p-4">
+    <div class="bg-[#F4F8F6] rounded-2xl w-full max-w-[540px] max-h-[92vh] overflow-y-auto shadow-2xl border border-[#DCE5DF] flex flex-col justify-between relative">
+      <div class="sticky top-0 z-30 bg-white px-6 py-4 border-b border-[#DCE5DF] flex justify-between items-center">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-[#E8EFEA] flex items-center justify-center text-[#1B4D3E]">
+            <i data-lucide="receipt" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 id="poModalTitle" class="font-bold text-[#12372C] text-sm">Automated Xendit Payout Receipt</h3>
+            <p id="poModalSubtitle" class="text-[10px] text-[#4F695D]">Recorded E-Wallet Disbursement &amp; Settlement Summary</p>
+          </div>
+        </div>
+        <button type="button" onclick="window.closePayoutReceiptModal()" class="w-8 h-8 rounded-full bg-[#F4F8F6] hover:bg-[#E8EFEA] text-[#12372C] border border-[#DCE5DF] flex items-center justify-center font-bold text-xs cursor-pointer">✕</button>
+      </div>
+
+      <div class="p-5 space-y-3.5 text-xs">
+        <div class="bg-[#1B4D3E] text-white p-4 rounded-xl flex items-center justify-between gap-3">
+          <div>
+            <span class="text-[10px] text-white/75 uppercase font-semibold block">Recorded Xendit Reference / Payout ID</span>
+            <p id="poModalRefDisplay" class="font-mono font-bold text-sm mt-0.5">XND-GCASH-000000</p>
+            <p id="poModalDateDisplay" class="text-[10px] text-white/80 mt-0.5">Disbursed automatically via Xendit Gateway</p>
+          </div>
+          <span id="poModalStatusBadge" class="bg-[#E4F0E8] text-[#1F6B52] px-3 py-1 rounded-lg text-[10px] font-bold uppercase shrink-0">
+            Settled
+          </span>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-2.5">
+          <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider border-b border-[#DCE5DF] pb-1.5">Merchant &amp; Account Details</h4>
+          <div class="grid grid-cols-2 gap-2.5">
+            <div>
+              <span class="text-[10px] text-[#4F695D] block">Establishment</span>
+              <p class="font-semibold text-[#12372C]" id="poModalMerchant">...</p>
+            </div>
+            <div>
+              <span class="text-[10px] text-[#4F695D] block">Contact Person</span>
+              <p class="font-medium text-[#12372C]" id="poModalContact">...</p>
+            </div>
+            <div class="col-span-2">
+              <span class="text-[10px] text-[#4F695D] block">Email Address</span>
+              <p class="font-medium text-[#3A826D] break-all" id="poModalEmail">...</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-[#DCE5DF] space-y-3">
+          <h4 class="font-bold text-[#12372C] text-xs uppercase tracking-wider border-b border-[#DCE5DF] pb-1.5">Disbursement Calculation</h4>
+          <div class="grid grid-cols-2 gap-3 bg-[#F7F9F7] p-3 rounded-xl border border-[#DCE5DF]">
+            <div>
+              <span class="text-[10px] text-[#4F695D] block">Remaining Wallet Balance</span>
+              <p class="font-bold text-[#12372C] text-sm" id="poModalBalance">₱0.00</p>
+            </div>
+            <div>
+              <span class="text-[10px] text-[#4F695D] block">Gross Withdrawn</span>
+              <p class="font-bold text-[#1B4D3E] text-sm" id="poModalRequested">₱0.00</p>
+            </div>
+            <div class="col-span-2">
+              <span class="text-[10px] text-[#1B4D3E] font-semibold block">Net Disbursed via Xendit</span>
+              <p class="font-bold text-[#3A826D] text-base" id="poModalNet">₱0.00</p>
+            </div>
+          </div>
+
+          <div class="bg-[#E8EFEA] border border-[#D5E3D9] rounded-xl p-3 space-y-0.5">
+            <p class="text-[10px] font-semibold uppercase text-[#1B4D3E]">Disbursed To E-Wallet (<span id="poModalChannel">GCash</span>):</p>
+            <p class="text-sm font-bold text-[#12372C]" id="poModalAcctNum">0917XXXXXXX</p>
+            <p class="text-[11px] text-[#4F695D]">Account Holder Name: <strong class="text-[#12372C]" id="poModalAcctName">...</strong></p>
+          </div>
+        </div>
+      </div>
+
+      <div id="poModalActionsFooter" class="px-6 py-3.5 bg-white border-t border-[#DCE5DF] flex justify-end items-center">
+        <button type="button" onclick="window.closePayoutReceiptModal()" class="bg-[#1B4D3E] hover:bg-[#12372C] text-white font-semibold text-xs px-7 py-2.5 rounded-xl transition-colors cursor-pointer">
+          Close Receipt
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEW-ONLY PAYOUT RECEIPT MODAL + IMMEDIATE 20-ROW SCREENSHOT PAGINATION SCRIPT -->
+  <script>
+    (function () {
+      let currentPage = 1;
+      let pageSize = 20;
+      let isPaginating = false;
+
+      window.closePayoutReceiptModal = function () {
+        const modal = document.getElementById('payoutApprovalModal');
+        if (modal) {
+          modal.classList.add('hidden');
+          modal.classList.remove('flex');
+        }
+        document.body.classList.remove('overflow-hidden');
+      };
+
+      window.openPayoutReceiptModal = function (btn) {
+        if (!btn) return;
+        const poId = btn.getAttribute('data-id') || 'PO';
+        const merch = btn.getAttribute('data-merchant') || 'Merchant';
+        const contact = btn.getAttribute('data-contact') || 'Owner';
+        const email = btn.getAttribute('data-email') || 'N/A';
+        const tier = btn.getAttribute('data-tier') || 'Basic Tier (0% Payout Fee)';
+        const channel = btn.getAttribute('data-channel') || 'GCash';
+        const acctNum = btn.getAttribute('data-account-num') || 'N/A';
+        const acctName = btn.getAttribute('data-account-name') || contact;
+        const dateStr = btn.getAttribute('data-date') || '';
+        const balance = btn.getAttribute('data-balance') || '₱0.00';
+        const requested = btn.getAttribute('data-requested') || '₱0.00';
+        const fee = btn.getAttribute('data-fee') || '₱0.00';
+        const net = btn.getAttribute('data-net') || '₱0.00';
+        const ref = btn.getAttribute('data-ref') || 'Recorded';
+        const status = btn.getAttribute('data-status') || 'Settled';
+
+        const setElText = (id, val) => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = val;
+        };
+
+        setElText('poModalTitle', `Automated Xendit Payout Receipt (${poId})`);
+        setElText('poModalRefDisplay', ref);
+        setElText('poModalDateDisplay', dateStr ? `Disbursed on ${dateStr}` : 'Disbursed automatically via Xendit');
+        setElText('poModalStatusBadge', status);
+        setElText('poModalMerchant', merch);
+        setElText('poModalTier', tier);
+        setElText('poModalContact', contact);
+        setElText('poModalEmail', email);
+        setElText('poModalBalance', balance);
+        setElText('poModalRequested', requested);
+        setElText('poModalNet', net);
+        setElText('poModalChannel', channel);
+        setElText('poModalAcctNum', acctNum);
+        setElText('poModalAcctName', acctName);
+
+        const feeEl = document.getElementById('poModalFee');
+        const noteEl = document.getElementById('poModalFeeNote');
+        const isZeroFee = fee === '₱0.00' || fee === '0.00' || fee === '0';
+        if (feeEl) {
+          if (isZeroFee) {
+            feeEl.textContent = '₱0.00 (0% Cash-Out Fee)';
+            feeEl.className = 'font-semibold text-[#3A826D]';
+          } else {
+            feeEl.textContent = `${fee} (Historical Payout Fee)`;
+            feeEl.className = 'font-semibold text-amber-700';
+          }
+        }
+        if (noteEl) {
+          noteEl.textContent = isZeroFee
+            ? 'Platform commission (10% Basic / 4% Pro) was already settled from the 20% online commitment fee at order completion—100% of the requested wallet withdrawal was disbursed.'
+            : 'Historical withdrawal record processed under the legacy payout-fee model.';
+        }
+
+        const modal = document.getElementById('payoutApprovalModal');
+        if (modal) {
+          modal.classList.remove('hidden');
+          modal.classList.add('flex');
+        }
+      };
+
+      window.openPayoutApprovalModal = window.openPayoutReceiptModal;
+
+      function buildPageList(curr, total) {
+        if (total <= 9) {
+          return Array.from({ length: total }, (_, i) => i + 1);
+        }
+        if (curr <= 6) {
+          return [1, 2, 3, 4, 5, 6, 7, 8, '...', total];
+        }
+        if (curr >= total - 5) {
+          return [1, '...', total - 7, total - 6, total - 5, total - 4, total - 3, total - 2, total - 1, total];
+        }
+        return [1, '...', curr - 2, curr - 1, curr, curr + 1, curr + 2, '...', total];
+      }
+
+      function renderScreenshotPagination(containerId, summaryId, curr, totalPages, totalItems, startIdx, endIdx, onPageClick) {
+        const summaryEl = document.getElementById(summaryId);
+        if (summaryEl) {
+          summaryEl.textContent =
+            totalItems > 0
+              ? `${(startIdx + 1).toLocaleString()}-${endIdx.toLocaleString()} of ${totalItems.toLocaleString()}`
+              : '0-0 of 0';
+        }
+
+        const btnContainer = document.getElementById(containerId);
+        if (!btnContainer) return;
+        btnContainer.innerHTML = '';
+
+        const backBtn = document.createElement('button');
+        backBtn.type = 'button';
+        backBtn.disabled = curr <= 1;
+        backBtn.innerHTML = '<span class="text-sm leading-none">&lsaquo;</span><span>Back</span>';
+        backBtn.className =
+          curr <= 1
+            ? 'h-9 px-3.5 rounded-lg border border-gray-200 bg-white text-gray-300 text-xs font-medium flex items-center gap-1.5 cursor-not-allowed select-none'
+            : 'h-9 px-3.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer';
+        if (curr > 1) backBtn.onclick = () => onPageClick(curr - 1);
+        btnContainer.appendChild(backBtn);
+
+        const pages = buildPageList(curr, totalPages);
+        pages.forEach((p) => {
+          if (p === '...') {
+            const dots = document.createElement('span');
+            dots.textContent = '⋯';
+            dots.className = 'w-9 h-9 rounded-lg border border-gray-200 bg-white text-gray-500 text-xs font-bold flex items-center justify-center select-none';
+            btnContainer.appendChild(dots);
+          } else {
+            const numBtn = document.createElement('button');
+            numBtn.type = 'button';
+            numBtn.textContent = String(p);
+            const isActive = p === curr;
+            numBtn.className = isActive
+              ? 'w-9 h-9 rounded-lg bg-black text-white border border-black text-xs font-bold flex items-center justify-center shadow-2xs'
+              : 'w-9 h-9 rounded-lg bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer';
+            if (!isActive) numBtn.onclick = () => onPageClick(p);
+            btnContainer.appendChild(numBtn);
+          }
+        });
+
+        const nextBtn = document.createElement('button');
+        nextBtn.type = 'button';
+        nextBtn.disabled = curr >= totalPages;
+        nextBtn.innerHTML = '<span>Next</span><span class="text-sm leading-none">&rsaquo;</span>';
+        nextBtn.className =
+          curr >= totalPages
+            ? 'h-9 px-3.5 rounded-lg border border-gray-200 bg-white text-gray-300 text-xs font-medium flex items-center gap-1.5 cursor-not-allowed select-none'
+            : 'h-9 px-3.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer';
+        if (curr < totalPages) nextBtn.onclick = () => onPageClick(curr + 1);
+        btnContainer.appendChild(nextBtn);
+      }
+
+      window.changePayoutsPageSize = function (val) {
+        pageSize = parseInt(val, 10) || 20;
+        window.applyPayoutsPagination(1);
+      };
+
+      window.applyPayoutsPagination = function (targetPage) {
+        if (isPaginating) return;
+        isPaginating = true;
+        try {
+          const table = document.getElementById('payoutsTable');
+          if (!table) return;
+
+          const allRows = Array.from(table.querySelectorAll('tbody tr.payout-data-row'));
+          const searchInput = document.getElementById('payoutSearchInput');
+          const dateInput = document.getElementById('payoutDateInput');
+          const q = (searchInput ? searchInput.value : '').trim().toLowerCase();
+          const dateVal = (dateInput ? dateInput.value : '').trim();
+
+          const matchedRows = allRows.filter((row) => {
+            const hay = (row.getAttribute('data-search') || row.innerText || '').toLowerCase();
+            if (q && !hay.includes(q)) return false;
+
+            if (dateVal) {
+              const rowDate = row.getAttribute('data-date') || '';
+              const parts = dateVal.split(' to ');
+              if (parts.length === 2) {
+                if (rowDate < parts[0].trim() || rowDate > parts[1].trim()) return false;
+              } else if (rowDate !== dateVal) {
+                return false;
+              }
+            }
+            return true;
+          });
+
+          const total = matchedRows.length;
+          const totalPages = Math.max(1, Math.ceil(total / pageSize));
+          currentPage = Math.max(1, Math.min(targetPage || currentPage, totalPages));
+
+          const startIdx = (currentPage - 1) * pageSize;
+          const endIdx = Math.min(startIdx + pageSize, total);
+
+          allRows.forEach((r) => {
+            r.style.display = '';
+            r.classList.add('pg-hidden');
+          });
+          matchedRows.slice(startIdx, endIdx).forEach((r) => r.classList.remove('pg-hidden'));
+
+          renderScreenshotPagination(
+            'payoutsPaginationButtons',
+            'payoutsPaginationSummary',
+            currentPage,
+            totalPages,
+            total,
+            startIdx,
+            endIdx,
+            window.applyPayoutsPagination
+          );
+        } finally {
+          isPaginating = false;
+        }
+      };
+
+      function initPayoutsPaginationBindings() {
+        const searchInput = document.getElementById('payoutSearchInput');
+        if (searchInput && !searchInput.dataset.boundPoPg) {
+          searchInput.dataset.boundPoPg = '1';
+          searchInput.addEventListener('input', function () {
+            setTimeout(() => window.applyPayoutsPagination(1), 20);
+          });
+        }
+        const dateInput = document.getElementById('payoutDateInput');
+        if (dateInput && !dateInput.dataset.boundPoPg) {
+          dateInput.dataset.boundPoPg = '1';
+          dateInput.addEventListener('change', function () {
+            setTimeout(() => window.applyPayoutsPagination(1), 60);
+          });
+        }
+        const tbody = document.querySelector('#payoutsTable tbody');
+        if (tbody && !tbody.dataset.boundObs) {
+          tbody.dataset.boundObs = '1';
+          const obs = new MutationObserver(() => {
+            if (!isPaginating) window.applyPayoutsPagination(currentPage);
+          });
+          obs.observe(tbody, { childList: true });
+        }
+        window.applyPayoutsPagination(1);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initPayoutsPaginationBindings);
+      } else {
+        initPayoutsPaginationBindings();
+      }
+      setTimeout(initPayoutsPaginationBindings, 50);
+    })();
+  </script>
+{% endblock %}
