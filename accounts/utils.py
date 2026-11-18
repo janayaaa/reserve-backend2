@@ -1010,13 +1010,22 @@ def extract_cebu_permit_data(
             result["capital"] = cap_match.group(1).strip()
 
         # 3. Business Address
+        header_or_footer_ignore = re.compile(
+            r"(?:CEBU\s*CITY\s*GOVERNMENT|CITY\s*GOVERNMENT|OFFICE\s*OF\s*THE\s*MAYOR|"
+            r"LICENSING\s*OFFICE|BUSINESS\s*PERMIT|REPUBLIC\s*OF\s*THE\s*PHILIPPINES|"
+            r"CITY\s*MAYOR|HOTLINE|CEBUCITY|WWW\.|GMAIL\.COM|PUBLIC\s*SERVICE|"
+            r"CONSPICUOUS\s*PLACE|ARCHIVAL|LIMQUIACO)",
+            re.IGNORECASE,
+        )
+
+        # First pass: look specifically for a line with street/market/barangay/postal landmarks
         for line in raw_lines:
+            if header_or_footer_ignore.search(line):
+                continue
             if re.search(
-                r"(?:Cebu\s*City|C\.C\.|Public\s*Market|Parian|Jakosalem|Colon|Katipunan|Tisa|Bldg|Street|St\.|Brgy|Barangay|Philippines|6000)",
-                line,
-                re.IGNORECASE,
-            ) and not re.search(
-                r"(?:Hotline|cebucity|www\.|gmail\.com|OFFICE OF THE MAYOR|Republic of|CITY MAYOR)",
+                r"(?:Public\s*Market|Market|Street|St\.|Road|Rd\.|Ave|Avenue|Sitio|Purok|"
+                r"Brgy|Barangay|Tisa|Parian|Jakosalem|Colon|Katipunan|Mabolo|Lahug|Banilad|"
+                r"Talamban|Guadalupe|Labangon|Mambaling|Pardo|Bldg|Building|6000)",
                 line,
                 re.IGNORECASE,
             ):
@@ -1024,10 +1033,35 @@ def extract_cebu_permit_data(
                     r"^(?:[Bb][Uu][Ss][Ii][Nn][Ee](?:[Ss][Ss])?\s*(?:[Aa][Dd][Dd]?[Rr][Ee][Ss][Ss])?|[Aa][Dd][Dd]?[Rr][Ee][Ss][Ss])\s*[:\-]?\s*",
                     "",
                     line,
-                ).strip()
+                ).strip(" :-.,")
                 if len(cleaned_addr) >= 10:
                     result["business_address"] = cleaned_addr
                     break
+
+        # Second pass fallback: look between BUSINESS ADDRESS and CALENDAR YEAR / LINE OF BUSINESS
+        if not result["business_address"]:
+            baddr_match = re.search(
+                r"(?:Business\s*Add?ress|ADDRESS)\s*[:\-]?\s*\n?(.*?)(?=CALENDAR|Line/Nature|LINE\s+OF\s+BUSINESS|\d{4}\s*[\-–]|$)",
+                full_text,
+                re.DOTALL | re.IGNORECASE,
+            )
+            if baddr_match:
+                addr_lines = []
+                for l in baddr_match.group(1).splitlines():
+                    clean_l = re.sub(
+                        r"^(?:[Bb][Uu][Ss][Ii][Nn][Ee](?:[Ss][Ss])?\s*(?:[Aa][Dd][Dd]?[Rr][Ee][Ss][Ss])?|[Aa][Dd][Dd]?[Rr][Ee][Ss][Ss])\s*[:\-]?\s*",
+                        "",
+                        l.strip(),
+                    ).strip(" :-.,")
+                    if (
+                        len(clean_l) >= 6
+                        and not clean_l.isdigit()
+                        and not header_or_footer_ignore.search(clean_l)
+                        and clean_l.upper() not in ("ADDRESS", "BUSINESS", "NAME")
+                    ):
+                        addr_lines.append(clean_l)
+                if addr_lines:
+                    result["business_address"] = " ".join(addr_lines)
 
         if not result["business_address"] and expected_address:
             result["business_address"] = expected_address
