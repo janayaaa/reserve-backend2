@@ -108,11 +108,7 @@
             <td class="p-3.5 font-mono font-semibold text-[#1B4D3E]">{{ po.id }}</td>
             <td class="p-3.5">
               <span class="font-semibold text-[#12372C] block">{{ po.merchant_name }}</span>
-              {% if 'Pro Tier' in po.tier_name %}
-                <span class="bg-[#FEF3C7] text-[#B45309] border border-amber-300 px-2 py-0.5 rounded text-[9px] font-bold inline-block mt-0.5">{{ po.tier_name }}</span>
-              {% else %}
-                <span class="bg-[#F8FAFC] text-[#475569] border border-[#E2E8F0] px-2 py-0.5 rounded text-[9px] font-semibold inline-block mt-0.5">{{ po.tier_name }}</span>
-              {% endif %}
+              
             </td>
             <td class="p-3.5">
               <span class="font-semibold text-[#12372C]">{{ po.channel }}: {{ po.account_number }}</span>

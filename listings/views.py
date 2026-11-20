@@ -146,9 +146,9 @@ def ensure_listing_reference_data():
         UnitMetrics.objects.get_or_create(unit_id=uid, defaults={"unit_name": uname})
 
     categories = {
-        1: "Bread",
-        2: "Pastry",
-        3: "Cake",
+        1: "Plain",
+        2: "Sweet",
+        3: "Egg-Based",
         4: "Custom/Others",
         5: "Leafy Greens",
         6: "Vegetables",
@@ -156,7 +156,7 @@ def ensure_listing_reference_data():
         8: "Root Crops",
     }
     for cid, cname in categories.items():
-        Category.objects.get_or_create(
+        Category.objects.update_or_create(
             category_id=cid, defaults={"category_name": cname}
         )
 
@@ -269,6 +269,69 @@ def parse_frontend_expiry(expiry_date_str, expiry_time_str):
     except Exception as e:
         print("Expiry parse fallback notice:", e)
         return None
+
+
+def parse_frontend_prep_datetime(prep_date_str):
+    if not prep_date_str:
+        return timezone.now()
+    try:
+        cleaned_str = (
+            str(prep_date_str)
+            .replace(",", "")
+            .replace("Sept ", "Sep ")
+            .replace("\u202f", " ")
+            .replace("\xa0", " ")
+            .strip()
+        )
+        cleaned_str = re.sub(r"\s+", " ", cleaned_str)
+        try:
+            prep_dt = datetime.strptime(cleaned_str, "%b %d %Y %I:%M %p")
+        except ValueError:
+            prep_dt = datetime.strptime(cleaned_str, "%b %d %Y")
+
+        if timezone.is_naive(prep_dt):
+            prep_dt = timezone.make_aware(prep_dt)
+        return prep_dt
+    except Exception as e:
+        print("Prep date parse fallback notice:", e)
+        return timezone.now()
+
+
+def compute_base_shelf_hours(
+    category_name, secondary_class="Plain", storage="Ambient"
+):
+    """
+    Determines baseline shelf-life hours before applying the Arrhenius TTT
+    live Cebu City temperature adjustment.
+    """
+    is_chilled = "Chilled" in str(storage or "")
+    is_frozen = "Frozen" in str(storage or "")
+
+    cat_clean = str(category_name or "").strip()
+    sec_clean = str(secondary_class or "").strip()
+
+    produce_hours = {
+        "Leafy Greens": 48.0,
+        "Vegetables": 72.0,
+        "Fruits": 96.0,
+        "Root Crops": 240.0,
+    }
+    if cat_clean in produce_hours:
+        return produce_hours[cat_clean]
+
+    if sec_clean == "Egg-Based" or cat_clean in ("Cake", "Egg-Based"):
+        return 72.0 if is_chilled else 24.0
+    if sec_clean == "Sweet" or cat_clean in ("Pastry", "Pastries", "Sweet"):
+        return 120.0 if is_chilled else 48.0
+    if sec_clean == "Plain" or cat_clean in ("Bread", "Plain"):
+        return 168.0 if is_chilled else 72.0
+
+    base = 48.0
+    if is_frozen:
+        return base * 5.0
+    if is_chilled:
+        return base * 2.5
+    return base
 
 
 def base_voucher_code(raw_code):
@@ -431,6 +494,7 @@ class MarketplaceFeedView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
+        ensure_listing_reference_data()
         auto_flag_expiring_listings()
 
         donated_commerce_ids = Donation.objects.values_list("listing_id", flat=True)
@@ -552,6 +616,16 @@ class MarketplaceFeedView(APIView):
                 item_data["shop_open_time"] = open_str
                 item_data["shop_close_time"] = close_str
                 item_data["shop_hours_enabled"] = hours_enabled
+                item_data["posted_temp"] = (
+                    float(safety_rec.posted_temp)
+                    if safety_rec.posted_temp is not None
+                    else 30.0
+                )
+                item_data["humidity_index"] = (
+                    float(safety_rec.humidity_index)
+                    if safety_rec.humidity_index is not None
+                    else 75.0
+                )
                 serialized_feed.append(item_data)
 
         serialized_feed.sort(key=lambda x: x.get("distance_km", 99.0))
@@ -585,12 +659,39 @@ class EstablishmentListingsView(APIView):
 
         listings = listings.exclude(prod_id__in=donated_product_ids)
 
+        prod_ids = [item.prod_id for item in listings]
+        safety_map = {
+            s.product_id: s
+            for s in ListingSafety.objects.filter(product_id__in=prod_ids)
+        }
+
         serialized_data = []
         flagged_count = 0
 
         for item in listings:
             serializer = PerishableProductSerializer(item)
-            data = serializer.data
+            data = dict(serializer.data)
+            s_rec = safety_map.get(item.prod_id)
+            if s_rec:
+                p_temp = (
+                    float(s_rec.posted_temp)
+                    if s_rec.posted_temp is not None
+                    else 30.0
+                )
+                h_idx = (
+                    float(s_rec.humidity_index)
+                    if s_rec.humidity_index is not None
+                    else 75.0
+                )
+                data["posted_temp"] = p_temp
+                data["humidity_index"] = h_idx
+                if "market" in str(merchant.merch_type or "").lower():
+                    data["storage_condition"] = f"Ambient ({p_temp:.1f}°C)"
+                elif p_temp == 4.0:
+                    data["storage_condition"] = "Chilled (4°C)"
+                else:
+                    data["storage_condition"] = f"Ambient ({p_temp:.1f}°C)"
+
             item_status = data.get("status", "Active")
             if item_status == "Flagged":
                 flagged_count += 1
@@ -607,54 +708,36 @@ class CalculateExpiryPreviewView(APIView):
 
     def get(self, request):
         prep_date_str = request.GET.get("prep_date", None)
-        storage = request.GET.get("storage", "Ambient (25°C)")
-        category_name = request.GET.get("category", "Bakery")
+        storage = request.GET.get("storage", "Ambient")
+        category_name = request.GET.get("category", "Plain")
+        secondary_class = request.GET.get("secondary_classification", "Plain")
 
-        current_temp, _ = get_cebu_weather()
+        current_temp, current_humidity = get_cebu_weather()
+        prep_dt = parse_frontend_prep_datetime(prep_date_str)
 
-        prep_dt = timezone.now()
-        if prep_date_str:
-            try:
-                cleaned_str = (
-                    prep_date_str.replace(",", "").replace("Sept ", "Sep ").strip()
-                )
-                try:
-                    prep_dt = datetime.strptime(cleaned_str, "%b %d %Y %I:%M %p")
-                except ValueError:
-                    prep_dt = datetime.strptime(cleaned_str, "%b %d %Y")
+        base_hours = compute_base_shelf_hours(
+            category_name, secondary_class, storage
+        )
 
-                if timezone.is_naive(prep_dt):
-                    prep_dt = timezone.make_aware(prep_dt)
-            except Exception as e:
-                print("Date parse error:", e)
+        if "Chilled" in storage or "Frozen" in storage:
+            calculated_expiry = prep_dt + timedelta(hours=base_hours)
+            effective_temp = 4.0 if "Chilled" in storage else -18.0
+        else:
+            calculated_expiry = calculate_ttt_expiry(
+                base_hours, current_temp, prep_dt
+            )
+            effective_temp = float(current_temp)
 
-        category_defaults = {
-            "Bakery": 36.0,
-            "Bread": 72.0,
-            "Pastries": 24.0,
-            "Pastry": 48.0,
-            "Cake": 24.0,
-            "Produce": 96.0,
-            "Leafy Greens": 48.0,
-            "Vegetables": 72.0,
-            "Fruits": 96.0,
-            "Root Crops": 240.0,
-            "Desserts & Sweets": 18.0,
-        }
-        base_hours = category_defaults.get(category_name, 48.0)
-
-        if "Frozen" in storage:
-            base_hours *= 5.0
-        elif "Chilled" in storage:
-            base_hours *= 2.5
-
-        calculated_expiry = calculate_ttt_expiry(base_hours, current_temp, prep_dt)
+        local_expiry = timezone.localtime(calculated_expiry)
 
         return Response(
             {
-                "date": calculated_expiry.strftime("%b %d, %Y"),
-                "time": calculated_expiry.strftime("%I:%M %p"),
-                "temp": current_temp,
+                "date": local_expiry.strftime("%b %d, %Y"),
+                "time": local_expiry.strftime("%I:%M %p").lstrip("0"),
+                "temp": round(float(current_temp), 1),
+                "humidity": int(current_humidity),
+                "effective_temp": round(float(effective_temp), 1),
+                "base_hours": base_hours,
             },
             status=status.HTTP_200_OK,
         )
@@ -710,20 +793,36 @@ class CreateListingView(APIView):
             new_listing = serializer.save()
             current_temp, current_humidity = get_cebu_weather()
 
-            storage = mutable_data.get("storage_condition", "Ambient (25°C)")
-            posted_temp = 25.00
-            if "Frozen" in storage:
+            storage = str(mutable_data.get("storage_condition", "Ambient"))
+            is_market_vendor = "market" in str(merchant.merch_type or "").lower()
+
+            if is_market_vendor:
+                posted_temp = float(current_temp)
+                storage = f"Ambient ({current_temp:.1f}°C)"
+            elif "Frozen" in storage:
                 posted_temp = -18.00
             elif "Chilled" in storage:
                 posted_temp = 4.00
+            else:
+                posted_temp = float(current_temp)
+
+            cat_obj = new_listing.category
+            cat_name = cat_obj.category_name if cat_obj else sec_class
+            base_hours = compute_base_shelf_hours(cat_name, sec_class, storage)
+            prep_dt = parse_frontend_prep_datetime(
+                mutable_data.get("preparation_date")
+            )
 
             final_expiry = parse_frontend_expiry(
                 mutable_data.get("expiry_date"), mutable_data.get("expiry_time")
             )
             if not final_expiry:
-                final_expiry = calculate_ttt_expiry(
-                    48.0, current_temp, timezone.now()
-                )
+                if "Chilled" in storage or "Frozen" in storage:
+                    final_expiry = prep_dt + timedelta(hours=base_hours)
+                else:
+                    final_expiry = calculate_ttt_expiry(
+                        base_hours, current_temp, prep_dt
+                    )
 
             safety_record = ListingSafety.objects.create(
                 product=new_listing,
@@ -763,16 +862,16 @@ class CreateListingView(APIView):
                 status=listing_status,
             )
 
-            exp_fmt = final_expiry.strftime("%b %d, %Y %I:%M %p")
+            exp_fmt = timezone.localtime(final_expiry).strftime("%b %d, %Y %I:%M %p")
             if merchant and merchant.user:
                 UserNotification.objects.create(
                     user=merchant.user,
-                    message=f"Listing '{new_listing.prod_name}' published ({parsed_qty} available). Live Cebu temp: {current_temp:.1f}°C • Expiry: {exp_fmt}.",
+                    message=f"Listing '{new_listing.prod_name}' published ({parsed_qty} available). Storage temp: {posted_temp:.1f}°C ({current_humidity}% RH) • Expiry: {exp_fmt}.",
                 )
             AdminNotification.objects.create(
                 user_id=1,
                 admin_notif_type="Listing",
-                message=f"{merchant.bus_name if merchant else 'Merchant'} posted '{new_listing.prod_name}' (Exp: {exp_fmt} @ {current_temp:.1f}°C).",
+                message=f"{merchant.bus_name if merchant else 'Merchant'} posted '{new_listing.prod_name}' (Exp: {exp_fmt} @ {posted_temp:.1f}°C).",
                 merchant=merchant,
             )
 
@@ -836,18 +935,26 @@ class UpdateListingView(APIView):
 
         safety_record = ListingSafety.objects.filter(product=listing).first()
         if safety_record:
+            current_temp, current_humidity = get_cebu_weather()
+            safety_record.humidity_index = current_humidity
+
             prep_date_str = request.data.get("preparation_date")
             if prep_date_str:
                 safety_record.safely_anchor_time = prep_date_str
 
-            storage = request.data.get("storage_condition")
-            if storage:
-                if "Frozen" in storage:
-                    safety_record.posted_temp = -18.00
-                elif "Chilled" in storage:
-                    safety_record.posted_temp = 4.00
-                else:
-                    safety_record.posted_temp = 25.00
+            storage = str(request.data.get("storage_condition") or "Ambient")
+            is_market_vendor = (
+                listing.merchant
+                and "market" in str(listing.merchant.merch_type or "").lower()
+            )
+            if is_market_vendor:
+                safety_record.posted_temp = float(current_temp)
+            elif "Frozen" in storage:
+                safety_record.posted_temp = -18.00
+            elif "Chilled" in storage:
+                safety_record.posted_temp = 4.00
+            else:
+                safety_record.posted_temp = float(current_temp)
 
             parsed_exp = parse_frontend_expiry(
                 request.data.get("expiry_date"), request.data.get("expiry_time")
@@ -1174,7 +1281,7 @@ class EstablishmentNotificationsView(APIView):
         direct_notifs = (
             AdminNotification.objects.filter(merchant=merchant)
             .exclude(admin_notif_type__startswith="Broadcast")
-            .order_by("-pk")[:20]
+            .order_by("-pk")[:25]
         )
 
         for an in direct_notifs:
@@ -1183,20 +1290,25 @@ class EstablishmentNotificationsView(APIView):
                 if getattr(an, "created_at", None)
                 else now
             )
-            target_rt = (
-                "/establishment/earnings"
-                if an.admin_notif_type == "Payout"
-                else (
-                    "/establishment/listing"
-                    if an.admin_notif_type == "Listing"
-                    else "/establishment/profile"
-                )
-            )
+            notif_type_clean = str(an.admin_notif_type or "Compliance").strip()
+            if notif_type_clean == "Report":
+                title_str = "Consumer Report Alert"
+                target_rt = "/establishment/listing"
+            elif notif_type_clean == "Payout":
+                title_str = "Automated Xendit Payout Settled"
+                target_rt = "/establishment/earnings"
+            elif notif_type_clean == "Listing":
+                title_str = "Listing Activity Notice"
+                target_rt = "/establishment/listing"
+            else:
+                title_str = f"Admin Notice ({notif_type_clean})"
+                target_rt = "/establishment/profile"
+
             events.append(
                 {
                     "id": f"compliance-{an.pk}",
                     "type": "system",
-                    "title": f"Admin Notice ({an.admin_notif_type})",
+                    "title": title_str,
                     "description": an.message,
                     "time": an_dt.strftime("%b %d, %Y • %I:%M %p"),
                     "sort_ts": float(an_dt.timestamp())
@@ -3055,6 +3167,115 @@ class ConsumerPortalView(APIView):
             return Response(
                 {"message": "Your account has been set to Inactive."},
                 status=status.HTTP_200_OK,
+            )
+
+        elif action == "submit_report":
+            target_type = (
+                str(request.data.get("target_type") or "listing")
+                .strip()
+                .lower()
+            )
+            prod_id = request.data.get("prod_id")
+            merch_id = request.data.get("merchant_id")
+            establishment_name = str(
+                request.data.get("establishment") or ""
+            ).strip()
+            food_name = str(request.data.get("food_name") or "").strip()
+            reason_category = str(
+                request.data.get("reason") or "Inappropriate / Prohibited Content"
+            ).strip()
+            details = str(request.data.get("details") or "").strip()
+
+            prod = None
+            merch = None
+
+            if prod_id and str(prod_id).isdigit() and int(prod_id) > 0:
+                prod = (
+                    PerishableProduct.objects.select_related("merchant__user")
+                    .filter(prod_id=int(prod_id))
+                    .first()
+                )
+                if prod and prod.merchant:
+                    merch = prod.merchant
+
+            if not merch and merch_id and str(merch_id).isdigit() and int(merch_id) > 0:
+                merch = (
+                    Merchant.objects.select_related("user")
+                    .filter(merch_id=int(merch_id))
+                    .first()
+                )
+
+            if not merch and establishment_name:
+                merch = (
+                    Merchant.objects.select_related("user")
+                    .filter(bus_name__iexact=establishment_name)
+                    .first()
+                )
+
+            item_label = (
+                prod.prod_name
+                if prod
+                else (food_name or "Surplus Food Listing")
+            )
+            merch_label = (
+                merch.bus_name
+                if merch
+                else (establishment_name or "Partner Merchant")
+            )
+            detail_summary = (
+                f"{reason_category} — \"{details}\""
+                if details
+                else reason_category
+            )
+
+            if target_type == "merchant" and not prod:
+                admin_msg = (
+                    f"[Consumer Report: Storefront] {consumer.cons_fullname} (CID-{consumer.cons_id}) "
+                    f"reported merchant '{merch_label}': {detail_summary}"
+                )
+                merch_msg = (
+                    f"Consumer Report Alert ({reason_category}): Your storefront '{merch_label}' "
+                    f"was reported by a consumer ({detail_summary}). Please ensure your listings and storefront "
+                    f"comply with ReServe Food Safety & Community Guidelines."
+                )
+            else:
+                fl_tag = f" (FL-{prod.prod_id})" if prod else ""
+                admin_msg = (
+                    f"[Consumer Report: Listing] {consumer.cons_fullname} (CID-{consumer.cons_id}) "
+                    f"reported listing '{item_label}'{fl_tag} by {merch_label}: {detail_summary}"
+                )
+                merch_msg = (
+                    f"Consumer Report Alert ({reason_category}): Your food listing '{item_label}'{fl_tag} "
+                    f"was reported by a consumer ({detail_summary}). Please inspect or update your listing in "
+                    f"Food Listings to maintain compliance."
+                )
+
+            admin_user = (
+                User.objects.filter(user_role="Admin").first()
+                or User.objects.first()
+            )
+            if admin_user:
+                AdminNotification.objects.create(
+                    user=admin_user,
+                    admin_notif_type="Report",
+                    message=admin_msg,
+                    merchant=merch,
+                )
+
+            if merch and merch.user:
+                UserNotification.objects.create(
+                    user=merch.user,
+                    message=merch_msg,
+                )
+
+            return Response(
+                {
+                    "message": (
+                        f"Report submitted! ReServe Admin and {merch_label} have been notified "
+                        f"for immediate compliance review."
+                    )
+                },
+                status=status.HTTP_201_CREATED,
             )
 
         elif action == "submit_review":

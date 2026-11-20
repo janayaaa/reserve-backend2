@@ -27,7 +27,7 @@
   <div class="flex flex-wrap items-center justify-between gap-3">
     <div>
       <h2 class="text-2xl font-bold text-[#12372C] tracking-tight">User Management &amp; System Analysis Overview</h2>
-      <p class="text-xs text-[#4F695D] mt-0.5">Monitor Consumer No-Show strikes, Merchant KYB permits &amp; ratings, Food Bank handshakes, and itemized digital receipts</p>
+      <p class="text-xs text-[#4F695D] mt-0.5">Monitor Consumer No-Show strikes, Merchant KYB permits, consumer reports &amp; ratings, Food Bank handshakes, and itemized digital receipts</p>
     </div>
   </div>
 
@@ -428,7 +428,7 @@
             <div class="bg-white p-3.5 rounded-xl border border-[#DCE5DF] flex flex-col justify-between">
               <span class="text-[10px] font-medium text-[#4F695D]">Issues Reported</span>
               <p id="consMetricIssuesRep" class="text-2xl font-bold text-[#12372C] mt-1">0</p>
-              <span class="text-[10px] text-[#4F695D]">Support tickets</span>
+              <span class="text-[10px] text-[#4F695D]">Support &amp; reports</span>
             </div>
           </div>
         </div>
@@ -444,7 +444,7 @@
             No-Show Strikes &amp; Reports Received
           </button>
           <button type="button" onclick="switchDossierTab('cons', 'issues', this)" class="cons-dossier-tab px-4 py-2 text-[11px] font-bold rounded-xl bg-white text-gray-600 hover:text-[#1B4D3E]">
-            Support Issues Reported
+            Support &amp; Listing Reports Filed
           </button>
         </div>
 
@@ -724,8 +724,8 @@
             <p id="merchMetricWallet" class="text-base font-bold text-[#1B4D3E] mt-0.5">₱0.00</p>
           </div>
           <div class="bg-white p-3 rounded-xl border border-[#DCE5DF]">
-            <span class="text-[10px] text-[#4F695D] block">Flags / Tickets</span>
-            <p id="merchMetricFlags" class="text-base font-bold text-[#B3261E] mt-0.5">0 / 0</p>
+            <span class="text-[10px] text-[#4F695D] block">Consumer Reports</span>
+            <p id="merchMetricFlags" class="text-base font-bold text-[#B3261E] mt-0.5">0</p>
           </div>
         </div>
 
@@ -814,15 +814,16 @@
           </div>
         </div>
 
+        <!-- MERCHANT DOSSIER TABS (RECEIPTS, CONSUMER REVIEWS, CONSUMER REPORTS) -->
         <div class="flex gap-2 border-b border-[#DCE5DF] pb-1 overflow-x-auto">
-          <button type="button" onclick="switchDossierTab('merch', 'receipts', this)" class="merch-dossier-tab px-4 py-2 text-[11px] font-black rounded-xl bg-[#1B4D3E] text-white">
+          <button type="button" id="merchTabBtn-receipts" onclick="window.selectMerchantDossierTab('receipts', this)" class="merch-dossier-tab px-4 py-2 text-[11px] font-black rounded-xl bg-[#1B4D3E] text-white cursor-pointer">
             Sales &amp; Donation Handshake Receipts
           </button>
-          <button type="button" onclick="switchDossierTab('merch', 'reviews', this)" class="merch-dossier-tab px-4 py-2 text-[11px] font-bold rounded-xl bg-white text-gray-600 hover:text-[#1B4D3E]">
+          <button type="button" id="merchTabBtn-reviews" onclick="window.selectMerchantDossierTab('reviews', this)" class="merch-dossier-tab px-4 py-2 text-[11px] font-bold rounded-xl bg-white text-gray-600 hover:text-[#1B4D3E] cursor-pointer">
             Consumer Reviews Received
           </button>
-          <button type="button" onclick="switchDossierTab('merch', 'reports', this)" class="merch-dossier-tab px-4 py-2 text-[11px] font-bold rounded-xl bg-white text-gray-600 hover:text-[#1B4D3E]">
-            Compliance Notices &amp; Support Tickets
+          <button type="button" id="merchTabBtn-reports" onclick="window.selectMerchantDossierTab('reports', this)" class="merch-dossier-tab px-4 py-2 text-[11px] font-bold rounded-xl bg-white text-gray-600 hover:text-[#B3261E] cursor-pointer">
+            Consumer Reports &amp; Notices <span id="merchReportsTabBadge" class="ml-1 px-1.5 py-0.2 rounded-full bg-[#FBE4E1] text-[#B3261E] text-[10px] font-bold">0</span>
           </button>
         </div>
 
@@ -848,11 +849,15 @@
         </div>
 
         <div id="merch-panel-reviews" class="merch-dossier-panel hidden bg-white p-4 rounded-xl border border-[#DCE5DF] max-h-64 overflow-y-auto">
-          <div id="merchantReviewsBody" class="space-y-2 text-xs"></div>
+          <div id="merchantReviewsBody" class="space-y-2 text-xs">
+            <p class="text-[#4F695D] text-center py-3">Loading consumer reviews...</p>
+          </div>
         </div>
 
         <div id="merch-panel-reports" class="merch-dossier-panel hidden bg-white p-4 rounded-xl border border-[#DCE5DF] max-h-64 overflow-y-auto">
-          <div id="merchantReportsBody" class="space-y-2 text-xs"></div>
+          <div id="merchantReportsBody" class="space-y-2 text-xs">
+            <p class="text-[#4F695D] text-center py-3">Loading consumer reports...</p>
+          </div>
         </div>
 
         <div class="pt-1 flex flex-col md:flex-row items-center justify-between gap-3">
@@ -872,6 +877,7 @@
             </button>
             <select id="merchantSuspendReason" class="text-xs font-medium text-[#12372C] p-2.5 border border-[#DCE5DF] rounded-xl bg-white focus:outline-none">
               <option value="">Select suspension reason...</option>
+              <option value="Inappropriate or Prohibited Listing Reported by Consumers">Inappropriate / Prohibited Listing Reported</option>
               <option value="Expired Business Permit (Unrenewed)">Expired Business Permit</option>
               <option value="Food Quality / Safety Violation">Food Quality / Safety Violation</option>
               <option value="Repeated Unfulfilled Consumer Orders">Repeated Unfulfilled Orders</option>
@@ -1199,6 +1205,107 @@
         return '/media/' + clean;
       }
 
+      window.selectMerchantDossierTab = function (tabKey, btnEl) {
+        const key = tabKey || 'receipts';
+        document.querySelectorAll('.merch-dossier-tab').forEach((b) => {
+          b.className = 'merch-dossier-tab px-4 py-2 text-[11px] font-bold rounded-xl bg-white text-gray-600 hover:text-[#1B4D3E] cursor-pointer';
+        });
+        if (btnEl) {
+          btnEl.className = 'merch-dossier-tab px-4 py-2 text-[11px] font-black rounded-xl bg-[#1B4D3E] text-white cursor-pointer';
+        }
+        document.querySelectorAll('.merch-dossier-panel').forEach((p) => {
+          p.classList.add('hidden');
+        });
+        const targetPanel = document.getElementById(`merch-panel-${key}`);
+        if (targetPanel) targetPanel.classList.remove('hidden');
+      };
+
+      async function hydrateMerchantDossier(rawId) {
+        if (!rawId) return;
+        const reviewsBody = document.getElementById('merchantReviewsBody');
+        const reportsBody = document.getElementById('merchantReportsBody');
+        const txBody = document.getElementById('merchantTransactionsBody');
+        const flagsEl = document.getElementById('merchMetricFlags');
+        const ratingEl = document.getElementById('merchMetricRating');
+        const tabBadge = document.getElementById('merchReportsTabBadge');
+
+        try {
+          const res = await fetch(`/api/accounts/admin/user-transactions/merchant/${rawId}/`);
+          const data = await res.json();
+          if (!res.ok) return;
+
+          const beh = data.behavior || {};
+          const repCnt = Number(beh.consumer_reports_count ?? beh.reports_received_count ?? 0);
+          if (flagsEl) flagsEl.textContent = String(repCnt);
+          if (tabBadge) tabBadge.textContent = String(repCnt);
+          if (ratingEl && beh.avg_rating !== undefined) {
+            ratingEl.textContent = `★ ${beh.avg_rating} (${beh.reviews_count || 0})`;
+          }
+
+          if (reviewsBody) {
+            const revs = Array.isArray(data.reviews) ? data.reviews : [];
+            if (revs.length === 0) {
+              reviewsBody.innerHTML = '<p class="text-[#4F695D] text-center py-3">No consumer reviews received yet.</p>';
+            } else {
+              reviewsBody.innerHTML = revs.map((r) => `
+                <div class="p-3 rounded-xl bg-[#F7F9F7] border border-[#DCE5DF] space-y-1">
+                  <div class="flex items-center justify-between">
+                    <span class="font-bold text-[#12372C]">${r.consumer || 'Consumer'} • ${'★'.repeat(Math.max(1, Math.min(5, Number(r.score || 5))))} (${r.score || 5}/5)</span>
+                    <span class="text-[10px] text-[#4F695D]">${r.date || 'Recent'}</span>
+                  </div>
+                  <p class="text-[10.5px] font-semibold text-[#1B4D3E]">Item: ${r.item || 'Surplus Food'} • Voucher: ${r.voucher || 'Verified'}</p>
+                  <p class="text-[11px] text-[#12372C]">"${r.comment || 'Great food rescue experience!'}"</p>
+                </div>
+              `).join('');
+            }
+          }
+
+          if (reportsBody) {
+            const reps = Array.isArray(data.reports_received) ? data.reports_received : [];
+            if (reps.length === 0) {
+              reportsBody.innerHTML = '<p class="text-[#4F695D] text-center py-3">No consumer reports or compliance notices recorded for this merchant.</p>';
+            } else {
+              reportsBody.innerHTML = reps.map((rp) => {
+                const isConsumerRep = String(rp.type || '').toLowerCase().includes('report');
+                return `
+                  <div class="p-3 rounded-xl ${isConsumerRep ? 'bg-[#FBE4E1]/70 border border-[#B3261E]/35' : 'bg-[#F7F9F7] border border-[#DCE5DF]'} space-y-1">
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="px-2 py-0.5 rounded text-[9.5px] font-bold uppercase ${isConsumerRep ? 'bg-[#B3261E] text-white' : 'bg-[#1B4D3E] text-white'}">${rp.type || 'Notice'}</span>
+                      <span class="text-[10px] text-[#4F695D]">${rp.date || 'Recent'}</span>
+                    </div>
+                    <p class="text-[11px] text-[#12372C] font-medium pt-0.5">${rp.message || ''}</p>
+                  </div>
+                `;
+              }).join('');
+            }
+          }
+
+          if (txBody) {
+            const txs = Array.isArray(data.transactions) ? data.transactions : [];
+            if (txs.length > 0) {
+              txBody.innerHTML = txs.slice(0, 15).map((t) => {
+                const safeJson = JSON.stringify(t).replace(/"/g, '&quot;');
+                return `
+                  <tr class="hover:bg-[#F7F9F7]">
+                    <td class="p-2.5 font-mono font-semibold text-[#1B4D3E]">${t.id}</td>
+                    <td class="p-2.5 font-medium text-[#12372C]">${t.title}</td>
+                    <td class="p-2.5 text-[#4F695D]">${t.buyer}</td>
+                    <td class="p-2.5 text-[#4F695D]">${t.date}</td>
+                    <td class="p-2.5 font-semibold text-[#12372C]">${t.amount}</td>
+                    <td class="p-2.5"><span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#E4F0E8] text-[#1F6B52]">${t.status}</span></td>
+                    <td class="p-2.5">
+                      <button type="button" onclick="if(typeof window.openDigitalReceiptModal==='function'){window.openDigitalReceiptModal(JSON.parse(this.getAttribute('data-rec')))}" data-rec="${safeJson}" class="text-[#1B4D3E] hover:underline font-semibold text-[11px] cursor-pointer">View</button>
+                    </td>
+                  </tr>
+                `;
+              }).join('');
+            }
+          }
+        } catch (err) {
+          console.log('Merchant dossier hydration notice:', err);
+        }
+      }
+
       window.handleOpenConsumerModal = function (btn) {
         if (!btn) return;
         const rawId = btn.getAttribute('data-raw-id') || (btn.getAttribute('data-id') || '').replace(/\D/g, '');
@@ -1216,9 +1323,19 @@
         const rawPermit = btn.getAttribute('data-permit') || '';
         const input = document.getElementById('activeMerchantId');
         if (input) input.value = rawId;
+
+        window.selectMerchantDossierTab('receipts', document.getElementById('merchTabBtn-receipts'));
+
         if (typeof window.openActiveModal === 'function') {
           window.openActiveModal(btn);
+        } else {
+          const modal = document.getElementById('merchantActiveModal');
+          if (modal) {
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+          }
         }
+
         const activePermitBtn = document.getElementById('activePermitBtn');
         if (activePermitBtn) {
           activePermitBtn.onclick = function () {
@@ -1229,6 +1346,8 @@
             }
           };
         }
+
+        hydrateMerchantDossier(rawId);
       };
 
       window.handleOpenFoodBankPendingModal = function (btn) {
@@ -1482,7 +1601,6 @@
         const boxesEl = document.getElementById('inlineScannerOverlayBoxes');
         const imgEl = document.getElementById('inlineScannerPermitImg');
 
-        // STOP the laser sweep animation as soon as the scan completes
         if (laserBar) {
           laserBar.classList.add('hidden');
           laserBar.style.animationPlayState = 'paused';
@@ -1505,7 +1623,6 @@
               : 'bg-[#FBE4E1] text-[#B3261E] border border-[#B3261E]/40 text-xs font-bold px-3.5 py-1 rounded-xl';
         }
 
-        // STOP the pulse animation on the status dot once scan is finished
         if (pulseDot) {
           pulseDot.className =
             score >= 80
@@ -1714,7 +1831,6 @@
           };
         }
 
-        // Start laser & pulse animation while scanning is actively running
         const laserBar = document.getElementById('inlineScannerLaserBar');
         if (laserBar) {
           laserBar.classList.remove('hidden');
@@ -1779,153 +1895,6 @@
 
         const fallbackReport = buildClientFallbackReportFromMeta(permitMeta, busName, busAddress);
         renderInlineEligibilityReport(fallbackReport, permitMeta, '');
-      };
-
-      window.openAutoScanKybModal = async function (btn) {
-        if (!btn) return;
-        const merchantId = btn.getAttribute('data-id') || '';
-        const setText = (id, val) => {
-          const el = document.getElementById(id);
-          if (el) el.textContent = val;
-        };
-
-        let permitMeta = {};
-        try {
-          permitMeta = JSON.parse(btn.getAttribute('data-ocr') || '{}') || {};
-        } catch (e) {
-          permitMeta = {};
-        }
-
-        const cleanVal = (primary, fallback) => {
-          if (primary && primary !== 'Not Detected' && primary !== 'Unverified') {
-            return primary;
-          }
-          return fallback || 'Not Provided';
-        };
-
-        const rawName = btn.getAttribute('data-name') || '';
-        const rawType = btn.getAttribute('data-type') || 'Food Establishment';
-        const rawAddr = btn.getAttribute('data-address') || '';
-        const rawContact = btn.getAttribute('data-contact') || '';
-        const rawHotline = btn.getAttribute('data-hotline') || 'N/A';
-        const rawPhone = btn.getAttribute('data-phone') || 'Not Provided';
-        const rawEmail = btn.getAttribute('data-email') || 'N/A';
-        const rawDate = btn.getAttribute('data-date') || 'N/A';
-        const rawExpiry = btn.getAttribute('data-expiry') || '2026-12-31';
-        const rawPermitAttr = btn.getAttribute('data-permit') || '';
-        const permitUrl = normalizePermitUrl(rawPermitAttr);
-
-        const busName = cleanVal(permitMeta.business_name, rawName);
-        const busAddress = cleanVal(permitMeta.business_address, rawAddr);
-        const contactPerson = cleanVal(permitMeta.representative, rawContact);
-        const permitNo = cleanVal(permitMeta.permit_number, 'N/A');
-        const calendarYear = cleanVal(permitMeta.calendar_year, '2026-2027');
-        const tinNumber = cleanVal(permitMeta.tin_number || (permitMeta.capital ? `Cap: ₱${permitMeta.capital}` : ''), 'N/A');
-        const lineOfBus = cleanVal(permitMeta.nature_of_business, rawType);
-        const expiryDate = cleanVal(permitMeta.expiry_date, rawExpiry);
-
-        const idInput = document.getElementById('pendingMerchantId');
-        if (idInput) idInput.value = merchantId;
-
-        setText('pendingModalTitle', `Merchant KYB Review — ${busName}`);
-        setText('pendingBusName', busName);
-        setText('pendingMerchType', rawType);
-        setText('pendingDate', rawDate);
-        setText('pendingAddress', busAddress);
-        setText('pendingContact', contactPerson);
-        setText('pendingPhone', rawPhone);
-        setText('pendingHotline', rawHotline);
-        setText('pendingEmail', rawEmail);
-
-        setText('pendingPermitNo', permitNo);
-        setText('pendingCalendarYear', calendarYear);
-        setText('pendingTinNumber', tinNumber);
-        setText('pendingPermitExpiry', expiryDate);
-        setText('pendingLineOfBusiness', lineOfBus);
-
-        setText('ocrDocName', permitUrl.split('/').pop() || 'business_permit.jpg');
-
-        const imgEl = document.getElementById('inlineScannerPermitImg');
-        if (imgEl) {
-          imgEl.src = permitUrl;
-        }
-
-        const fileBtn = document.getElementById('pendingPermitBtn');
-        if (fileBtn) {
-          fileBtn.onclick = () => {
-            if (typeof window.openVerifiedPermitDocument === 'function') {
-              window.openVerifiedPermitDocument(merchantId, rawPermitAttr, `${busName} — Business Permit`);
-            } else {
-              window.open(permitUrl, '_blank');
-            }
-          };
-        }
-
-        const modal = document.getElementById('merchantPendingModal');
-        if (modal) {
-          modal.classList.remove('hidden');
-          modal.classList.add('flex');
-          document.body.classList.add('overflow-hidden');
-        }
-        if (window.lucide) window.lucide.createIcons();
-
-        const topBadge = document.getElementById('pendingAiScoreBadge');
-        if (topBadge) {
-          topBadge.textContent = 'Auto-Scanning Document...';
-          topBadge.className = 'bg-[#FEF3C7] text-[#B45309] border border-amber-300 text-xs font-bold px-3.5 py-1 rounded-xl';
-        }
-        const scoreValEl = document.getElementById('inlineScoreValue');
-        if (scoreValEl) scoreValEl.textContent = 'Scanning Landmarks...';
-        const summaryEl = document.getElementById('inlineVerdictSummary');
-        if (summaryEl) summaryEl.textContent = 'Running live OCR & Cebu City Business Permit landmark verification on uploaded image...';
-        const checklistEl = document.getElementById('inlineChecklistContainer');
-        if (checklistEl) checklistEl.innerHTML = '';
-        const boxesEl = document.getElementById('inlineScannerOverlayBoxes');
-        if (boxesEl) boxesEl.innerHTML = '';
-        const illegitBox = document.getElementById('inlineIllegitimateBox');
-        if (illegitBox) illegitBox.classList.add('hidden');
-
-        try {
-          const res = await fetch('/api/accounts/ocr/scan-permit/', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRFToken': getCsrfToken(),
-            },
-            body: JSON.stringify({ merchant_id: merchantId }),
-          });
-          const data = await res.json().catch(() => ({}));
-          if (res.ok && data.eligibility_report) {
-            permitMeta = Object.assign({}, permitMeta, data.ocr_data || {}, {
-              eligibility_report: data.eligibility_report,
-            });
-            btn.setAttribute('data-ocr', JSON.stringify(permitMeta));
-            renderInlineEligibilityReport(data.eligibility_report, data.ocr_data, data.permit_data_url);
-            return;
-          }
-        } catch (err) {
-          console.log('Auto KYB permit scan notice:', err);
-        }
-
-        const storedReport =
-          permitMeta.eligibility_report && permitMeta.eligibility_report.authenticity_score !== 92
-            ? permitMeta.eligibility_report
-            : {
-                authenticity_score: 0,
-                status_badge: 'Unverified / Illegitimate Document',
-                summary: 'Could not verify Cebu City Business Permit landmarks on this document.',
-                illegitimate_reasons: [
-                  'No verified Cebu City Mayor’s Business Permit headers or Permit No. found.',
-                ],
-                checks: [
-                  { field: '1. Cebu City LGU Header & Seal', status: 'flagged', detail: 'Not detected.' },
-                  { field: '2. Business Name & Permit No.', status: 'flagged', detail: 'Not detected.' },
-                ],
-                flagged_regions: [
-                  { id: 'unverified', label: 'Illegitimate / Unverified Document', reason: 'Missing Cebu Business Permit landmarks.', severity: 'error', box: { top: 5, left: 5, width: 90, height: 88 } },
-                ],
-              };
-        renderInlineEligibilityReport(storedReport, permitMeta, '');
       };
 
       window.openPendingModal = window.openAutoScanKybModal;

@@ -83,7 +83,7 @@
 
       <div class="relative flex-1">
         <i data-lucide="search" class="w-4 h-4 text-[#4F695D] absolute left-3.5 top-1/2 -translate-y-1/2"></i>
-        <input type="text" id="foodListingSearchInput" placeholder="Search food item, category, or establishment..." class="w-full pl-10 pr-4 py-2.5 bg-[#F7F9F7] rounded-xl text-xs border border-[#DCE5DF] text-[#12372C] placeholder-[#4F695D]/70 focus:outline-none focus:border-[#1B4D3E] focus:bg-white transition-all">
+        <input type="text" id="foodListingSearchInput" placeholder="Search food item, composition/category, or establishment..." class="w-full pl-10 pr-4 py-2.5 bg-[#F7F9F7] rounded-xl text-xs border border-[#DCE5DF] text-[#12372C] placeholder-[#4F695D]/70 focus:outline-none focus:border-[#1B4D3E] focus:bg-white transition-all">
       </div>
     </div>
   </div>
@@ -123,7 +123,7 @@
               class="hover:bg-[#F7F9F7] transition-colors listing-row"
               data-bucket="{{ item.bucket }}"
               data-date="{{ item.date }}"
-              data-search="{{ item.id|lower }} {{ item.title|lower }} {{ item.establishment|lower }} {{ item.category|lower }}"
+              data-search="{{ item.id|lower }} {{ item.title|lower }} {{ item.establishment|lower }} {% if item.category == 'Bread' %}plain{% elif item.category == 'Pastry' or item.category == 'Pastries' %}sweet{% elif item.category == 'Cake' %}egg-based{% else %}{{ item.category|lower }}{% endif %}"
               data-status="{{ item.status|lower }}">
             <td class="p-3.5 font-mono font-semibold text-[#1B4D3E]">{{ item.id }}</td>
             <td class="p-3.5">
@@ -134,7 +134,17 @@
                      class="w-11 h-11 rounded-xl object-cover border border-[#DCE5DF] shrink-0 bg-[#F7F9F7]">
                 <div>
                   <span class="font-semibold text-[#12372C] block text-xs">{{ item.title }}</span>
-                  <span class="text-[10px] text-[#4F695D]">{{ item.category }}</span>
+                  <span class="text-[10px] text-[#4F695D] listing-category-label">
+                    {% if item.category == 'Bread' or item.category == 'Custom/Others' %}
+                      Plain
+                    {% elif item.category == 'Pastry' or item.category == 'Pastries' %}
+                      Sweet
+                    {% elif item.category == 'Cake' %}
+                      Egg-Based
+                    {% else %}
+                      {{ item.category }}
+                    {% endif %}
+                  </span>
                 </div>
               </div>
             </td>

@@ -20,6 +20,7 @@ urlpatterns = [
     path('update/<int:pk>/', UpdateListingView.as_view(), name='update-listing'),
     path('delete/<int:pk>/', DeleteListingView.as_view(), name='delete-listing'),
     path('calculate-preview/', CalculateExpiryPreviewView.as_view(), name='calculate_preview'),
+    path('calculate-expiry/', CalculateExpiryPreviewView.as_view(), name='calculate_expiry'),
     path('notifications/', EstablishmentNotificationsView.as_view(), name='establishment-notifications'),
     path('announcements/', EstablishmentAnnouncementsView.as_view(), name='establishment-announcements'),
     path('establishment/', EstablishmentListingsView.as_view(), name='establishment-listings'),

@@ -1673,7 +1673,6 @@ def get_dashboard_recent_marketplace_records(limit=10):
     now_dt = timezone.now()
     combined = []
 
-    # 1. Recent Consumer Order Reservations (grouped by voucher)
     recent_orders = list(
         OrderReservation.objects.select_related(
             "consumer__user",
@@ -1784,7 +1783,6 @@ def get_dashboard_recent_marketplace_records(limit=10):
         rec["record_json"] = json.dumps(rec)
         combined.append(rec)
 
-    # 2. Recent Active Surplus Listings
     safety_map = {
         s.product_id: s
         for s in ListingSafety.objects.select_related("commerce").all()
@@ -1837,7 +1835,6 @@ def get_dashboard_recent_marketplace_records(limit=10):
         rec["record_json"] = json.dumps(rec)
         combined.append(rec)
 
-    # 3. Recent Surplus Donations
     for don in Donation.objects.select_related("merchant", "food_bank", "listing__listing__product").order_by("-donation_id")[:10]:
         p_name = (
             don.listing.listing.product.prod_name
@@ -1890,8 +1887,8 @@ def admin_user_transactions_api(request, role, account_id):
       - behavior (KPI metrics for the modal cards)
       - transactions (all orders / sales / donation handshakes with live dynamic pricing)
       - reviews (ratings & reviews given or received)
-      - reports_received (No-Show strikes / compliance notices)
-      - issues_reported (support tickets)
+      - reports_received (Consumer Reports / No-Show strikes / compliance notices)
+      - issues_reported (support tickets & consumer reports filed)
     """
     from listings.models import PerishableProduct, ListingSafety
     from donations.models import Donation, DonationRequest
@@ -2040,12 +2037,19 @@ def admin_user_transactions_api(request, role, account_id):
 
         if consumer and consumer.user:
             for an in AdminNotification.objects.filter(
-                Q(message__icontains=consumer.cons_fullname) | Q(message__icontains=consumer.user.user_email)
-            ).order_by("-pk")[:20]:
-                dt_fmt = timezone.localtime(an.created_at).strftime("%b %d, %Y") if getattr(an, "created_at", None) else "Recent"
-                if "support" in (an.admin_notif_type or "").lower():
-                    issues_reported.append({"type": "Support Ticket", "message": an.message, "date": dt_fmt})
-                elif "compliance" in (an.admin_notif_type or "").lower():
+                Q(message__icontains=consumer.cons_fullname)
+                | Q(message__icontains=consumer.user.user_email)
+                | Q(message__icontains=f"CID-{consumer.cons_id}")
+            ).order_by("-pk")[:25]:
+                dt_fmt = timezone.localtime(an.created_at).strftime("%b %d, %Y • %I:%M %p") if getattr(an, "created_at", None) else "Recent"
+                t_low = (an.admin_notif_type or "").lower()
+                if "support" in t_low or "report" in t_low:
+                    issues_reported.append({
+                        "type": "Consumer Report Filed" if "report" in t_low else "Support Ticket",
+                        "message": an.message,
+                        "date": dt_fmt,
+                    })
+                elif "compliance" in t_low:
                     reports_received.append({"type": an.admin_notif_type, "message": an.message, "date": dt_fmt})
 
         saved_kg = float(consumer.total_food_saved or 0) if consumer else 0.0
@@ -2166,7 +2170,6 @@ def admin_user_transactions_api(request, role, account_id):
                 "status": st_val,
             })
 
-        # Also include Merchant Donations in the Sales & Donation Handshake Receipts table
         merch_donations = list(
             Donation.objects.select_related("food_bank", "listing__listing__product")
             .filter(merchant_id=clean_id)
@@ -2228,14 +2231,20 @@ def admin_user_transactions_api(request, role, account_id):
                 "date": timezone.localtime(r.created_at).strftime("%b %d, %Y") if getattr(r, "created_at", None) else "Recent",
             })
 
+        consumer_reports_cnt = 0
         for an in AdminNotification.objects.filter(merchant_id=clean_id).exclude(
             admin_notif_type__startswith="Broadcast"
-        ).order_by("-pk")[:30]:
+        ).order_by("-pk")[:40]:
             dt_fmt = timezone.localtime(an.created_at).strftime("%b %d, %Y • %I:%M %p") if getattr(an, "created_at", None) else "Recent"
-            if "support" in (an.admin_notif_type or "").lower():
+            t_clean = str(an.admin_notif_type or "").strip()
+            t_low = t_clean.lower()
+            if "support" in t_low:
                 issues_reported.append({"type": "Support Ticket", "message": an.message, "date": dt_fmt})
-            else:
-                reports_received.append({"type": an.admin_notif_type or "Admin Notice", "message": an.message, "date": dt_fmt})
+            elif t_low == "report":
+                consumer_reports_cnt += 1
+                reports_received.append({"type": "Consumer Report", "message": an.message, "date": dt_fmt})
+            elif t_low in ("compliance", "kyb"):
+                reports_received.append({"type": "Compliance Notice", "message": an.message, "date": dt_fmt})
 
         active_listings_cnt = ListingSafety.objects.filter(
             product__merchant_id=clean_id, commerce__status="Active", commerce__qty_available__gt=0
@@ -2248,6 +2257,7 @@ def admin_user_transactions_api(request, role, account_id):
             "completed_sales": completed_sales_count,
             "donations_posted": len(merch_donations),
             "wallet_balance": f"₱{float(merchant.wallet_bal or 0):,.2f}" if merchant else "₱0.00",
+            "consumer_reports_count": consumer_reports_cnt,
             "reports_received_count": len(reports_received),
             "issues_reported_count": len(issues_reported),
         }
@@ -2368,7 +2378,6 @@ def admin_user_transactions_api(request, role, account_id):
     })
 
 
-# Alias so both /api/accounts/admin/user-transactions/... and /api/accounts/admin/dossier/... work seamlessly
 admin_user_dossier_api = admin_user_transactions_api
 
 
@@ -2515,7 +2524,7 @@ def admin_dashboard(request):
         t_low = raw_type.lower()
         if any(k in t_low for k in ('security', 'admin settings', 'governance')):
             bucket = 'security'
-        elif any(k in t_low for k in ('kyb', 'approved', 'registration', 'compliance', 'support')):
+        elif any(k in t_low for k in ('kyb', 'approved', 'registration', 'compliance', 'support', 'report')):
             bucket = 'kyb'
         elif any(k in t_low for k in ('payout', 'withdrawal')):
             bucket = 'payouts'
@@ -2652,6 +2661,21 @@ def admin_food_listing(request):
         else:
             merch_listing_stats[m_id]['flagged_expired'] += 1
 
+        raw_cat = prod.category.category_name if prod.category else ''
+        sec_part = str(prod.prod_type or '').split('|')[0].strip()
+        if raw_cat in ('Leafy Greens', 'Vegetables', 'Fruits', 'Root Crops'):
+            display_cat = raw_cat
+        elif sec_part in ('Plain', 'Sweet', 'Egg-Based'):
+            display_cat = sec_part
+        elif raw_cat == 'Bread':
+            display_cat = 'Plain'
+        elif raw_cat in ('Pastry', 'Pastries'):
+            display_cat = 'Sweet'
+        elif raw_cat == 'Cake':
+            display_cat = 'Egg-Based'
+        else:
+            display_cat = raw_cat or 'Plain'
+
         item_dict = {
             'raw_id': prod.prod_id,
             'id': f"FL-{prod.prod_id}",
@@ -2666,7 +2690,7 @@ def admin_food_listing(request):
             'quantity': f"{qty_val} {prod.unit.unit_name if prod.unit else 'pcs'}",
             'orig_price': f"₱{orig_p:,.2f}",
             'disc_price': f"₱{disc_p:,.2f}",
-            'category': prod.category.category_name if prod.category else (prod.merchant.merch_type if prod.merchant else 'Surplus'),
+            'category': display_cat,
             'status': status_val,
             'bucket': category_bucket,
             'image_url': prod.image_path if str(prod.image_path).startswith('http') else (f"/media/{prod.image_path}" if prod.image_path else ""),
